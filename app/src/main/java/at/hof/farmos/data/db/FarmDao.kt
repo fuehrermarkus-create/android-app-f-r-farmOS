@@ -131,9 +131,10 @@ abstract class FarmDao {
     abstract suspend fun deletePendingType(id: String)
 
     /** Ersetzt Foto-Platzhalter durch die echte Datei-ID vom Server. */
-    @Query("UPDATE pending_ops SET body = REPLACE(body, :old, :new)")
-    abstract suspend fun replaceInOps(old: String, new: String)
 
+    @Query("UPDATE pending_ops SET body = REPLACE(body, :oldText, :newText)")
+    abstract suspend fun replaceInOps(oldText: String, newText: String)
+    
     @Query("SELECT * FROM pending_ops ORDER BY seq")
     abstract suspend fun allOpsNow(): List<PendingOp>
 
