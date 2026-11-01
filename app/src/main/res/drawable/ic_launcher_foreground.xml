@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Einfaches Symbol: Feld mit Furchen und Sonne -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path android:fillColor="#F2C14E"
+        android:pathData="M54,30m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0" />
+    <path android:fillColor="#8BC34A"
+        android:pathData="M28,50 L80,50 L86,78 L22,78 Z" />
+    <path android:fillColor="#5A8F2E"
+        android:pathData="M33,55 L75,55 L76,58 L32,58 Z M30,63 L78,63 L79,66 L29,66 Z M27,71 L81,71 L82,74 L26,74 Z" />
+</vector>
