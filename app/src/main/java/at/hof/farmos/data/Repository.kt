@@ -97,7 +97,10 @@ class Repository(
             pull()
             prefs.lastSync = System.currentTimeMillis()
             cleanupPhotos()
-            push
+            if (hiddenWarnings.isNotEmpty()) {
+                push.copy(error = "farmOS blendet Einträge aus (fehlende Rechte): " +
+                    hiddenWarnings.joinToString(", ") + ". Rolle des Benutzers / Scope prüfen.")
+            } else push
         } catch (e: Exception) {
             push.copy(error = describe(e), offline = FarmApi.isNetworkError(e))
         }
@@ -203,57 +206,70 @@ class Repository(
             .mapNotNull { included[it]?.attributes?.obj("uri")?.str("url") }
             .joinToString("\n") { absoluteUrl(it) }
 
+    /** Bereiche, in denen farmOS Einträge wegen fehlender Rechte ausgeblendet hat. */
+    private val hiddenWarnings = mutableListOf<String>()
+
+    /**
+     * Lädt eine Liste. 404 heißt: Modul in farmOS nicht installiert -> leer.
+     * Andere Fehler werden mit dem Bereich beschriftet, damit man sieht, wo es hakt.
+     */
+    private suspend fun fetch(label: String, path: String, maxPages: Int = 40): ApiList =
+        try {
+            val l = api.getAll(path, maxPages)
+            if (l.omitted) hiddenWarnings += label
+            l
+        } catch (e: ApiException) {
+            if (e.code == 404) ApiList(emptyList(), emptyMap())
+            else throw ApiException(e.code, "$label: ${e.message}")
+        }
+
     private suspend fun pull() {
+        hiddenWarnings.clear()
+
         // Tierarten
-        val types = api.getAll("/api/taxonomy_term/animal_type?page[limit]=50").data.map {
+        val types = fetch("Tierarten", "/api/taxonomy_term/animal_type?page[limit]=50").data.map {
             AnimalTypeEntity(it.str("id")!!, it.attributes.str("name") ?: "?")
         }
         dao.replaceTypes(types)
         val typeNames = types.associate { it.id to it.name }
 
         // Log-Kategorien
-        val cats = runCatching {
-            api.getAll("/api/taxonomy_term/log_category?page[limit]=50").data.map {
-                CategoryEntity(it.str("id")!!, it.attributes.str("name") ?: "?")
-            }
-        }.getOrElse { if (FarmApi.isNetworkError(it)) throw it else emptyList() }
+        val cats = fetch("Kategorien", "/api/taxonomy_term/log_category?page[limit]=50").data.map {
+            CategoryEntity(it.str("id")!!, it.attributes.str("name") ?: "?")
+        }
         dao.replaceCategories(cats)
 
         // Flächen und Gebäude
-        val landList = api.getAll("/api/asset/land?filter[status]=active&page[limit]=50&include=image")
+        val landList = fetch("Flächen", "/api/asset/land?filter[status]=active&page[limit]=50&include=image")
         val lands = landList.data.map { it.toLocation("land", "land_type", landList.included) }
-        val structures = runCatching {
-            val l = api.getAll("/api/asset/structure?filter[status]=active&page[limit]=50&include=image")
-            l.data.map { it.toLocation("structure", "structure_type", l.included) }
-        }.getOrElse { if (FarmApi.isNetworkError(it)) throw it else emptyList() }
+        val structList = fetch("Gebäude", "/api/asset/structure?filter[status]=active&page[limit]=50&include=image")
+        val structures = structList.data.map { it.toLocation("structure", "structure_type", structList.included) }
         val locNames = (lands + structures).associate { it.id to it.name }
 
         // Kulturen (Pflanzungen) mit Kulturart
-        val plants = runCatching {
-            val plantTypes = api.getAll("/api/taxonomy_term/plant_type?page[limit]=50").data
-                .associate { it.str("id")!! to (it.attributes.str("name") ?: "?") }
-            val l = api.getAll("/api/asset/plant?filter[status]=active&page[limit]=50&include=image")
-            l.data.map { o ->
-                val a = o.attributes
-                LocationEntity(
-                    id = o.str("id")!!,
-                    kind = "plant",
-                    name = a.str("name") ?: "?",
-                    subtype = o.relationIds("plant_type").mapNotNull { plantTypes[it] }
-                        .joinToString(", ").ifBlank { null },
-                    notes = a.textField("notes"),
-                    areaInfo = null,
-                    locationNames = o.relationIds("location").mapNotNull { locNames[it] }
-                        .joinToString(", ").ifBlank { null },
-                    status = a.str("status") ?: "active",
-                    imageUrls = imageUrls(o, l.included),
-                )
-            }
-        }.getOrElse { if (FarmApi.isNetworkError(it)) throw it else emptyList() }
+        val plantTypes = fetch("Kulturarten", "/api/taxonomy_term/plant_type?page[limit]=50").data
+            .associate { it.str("id")!! to (it.attributes.str("name") ?: "?") }
+        val plantList = fetch("Kulturen", "/api/asset/plant?filter[status]=active&page[limit]=50&include=image")
+        val plants = plantList.data.map { o ->
+            val a = o.attributes
+            LocationEntity(
+                id = o.str("id")!!,
+                kind = "plant",
+                name = a.str("name") ?: "?",
+                subtype = o.relationIds("plant_type").mapNotNull { plantTypes[it] }
+                    .joinToString(", ").ifBlank { null },
+                notes = a.textField("notes"),
+                areaInfo = null,
+                locationNames = o.relationIds("location").mapNotNull { locNames[it] }
+                    .joinToString(", ").ifBlank { null },
+                status = a.str("status") ?: "active",
+                imageUrls = imageUrls(o, plantList.included),
+            )
+        }
         dao.replaceLocations(lands + structures + plants)
 
         // Tiere
-        val animalList = api.getAll("/api/asset/animal?filter[status]=active&page[limit]=50&include=image")
+        val animalList = fetch("Tiere", "/api/asset/animal?filter[status]=active&page[limit]=50&include=image")
         val animals = animalList.data.map { o ->
             val a = o.attributes
             val typeId = o.relationIds("animal_type").firstOrNull()
@@ -277,10 +293,9 @@ class Repository(
 
         // Logs (jeweils die neuesten 50 je Art)
         val logs = mutableListOf<LogEntity>()
-        for (type in LogKind.entries.map { it.apiType }.distinct()) {
-            val page = runCatching {
-                api.getFirstPage("/api/log/$type?sort=-timestamp&page[limit]=50&include=image")
-            }.getOrElse { if (FarmApi.isNetworkError(it)) throw it else ApiList(emptyList(), emptyMap()) }
+        for (kind in LogKind.entries.filter { !it.movement }) {
+            val type = kind.apiType
+            val page = fetch("Logs ${kind.label}", "/api/log/$type?sort=-timestamp&page[limit]=50&include=image", 1)
             page.data.forEach { o ->
                 val a = o.attributes
                 logs += LogEntity(
@@ -299,6 +314,80 @@ class Repository(
             }
         }
         dao.replaceLogs(logs)
+    }
+
+    // ================================================================ Verbindung testen
+
+    data class DiagItem(val title: String, val ok: Boolean, val detail: String)
+
+    /** Prüft Schritt für Schritt Server, Anmeldung, Benutzer und jeden Datenbereich. */
+    suspend fun diagnose(): List<DiagItem> {
+        val out = mutableListOf<DiagItem>()
+
+        // 1) Server erreichbar und antwortet farmOS?
+        try {
+            val (code, type, body) = api.rawGet("/api")
+            val isJson = type.contains("json")
+            out += DiagItem(
+                "Server ${prefs.serverUrl}",
+                isJson && code < 500 && code != 404,
+                "HTTP $code, ${type.ifBlank { "kein Inhaltstyp" }}" +
+                    if (!isJson) " – Antwort: " + body.trim().take(120).replace(Regex("\\s+"), " ") else "",
+            )
+        } catch (e: Exception) {
+            out += DiagItem("Server ${prefs.serverUrl}", false, describe(e) + " – im richtigen WLAN / Tailscale an?")
+            return out
+        }
+
+        // 2) Zugangstoken
+        try {
+            api.validToken()
+            out += DiagItem("Anmeldung", true, "Token gültig")
+        } catch (e: Exception) {
+            out += DiagItem("Anmeldung", false, describe(e) + " – bitte abmelden und neu anmelden")
+            return out
+        }
+
+        // 3) Zu welchem Benutzer gehört das Token?
+        try {
+            val root = api.send("GET", "/api", null)
+            val meId = root?.obj("meta")?.obj("links")?.obj("me")?.obj("meta")?.str("id")
+            if (meId == null) {
+                out += DiagItem("Benutzer", false, "Token gehört zu keinem Benutzer – Scope/Grant des Consumers prüfen")
+            } else {
+                val u = api.send("GET", "/api/user/user/$meId", null)
+                val nameText = u?.obj("data")?.attributes?.let { it.str("display_name") ?: it.str("name") } ?: meId
+                out += DiagItem("Benutzer", true, nameText)
+            }
+        } catch (e: Exception) {
+            out += DiagItem("Benutzer", false, describe(e))
+        }
+
+        // 4) Jeder Datenbereich einzeln
+        val checks = listOf(
+            "Tierarten" to "/api/taxonomy_term/animal_type",
+            "Tiere" to "/api/asset/animal",
+            "Flächen" to "/api/asset/land",
+            "Gebäude" to "/api/asset/structure",
+            "Kulturen" to "/api/asset/plant",
+            "Kategorien" to "/api/taxonomy_term/log_category",
+        ) + LogKind.entries.filter { !it.movement }.map { "Logs ${it.label}" to "/api/log/${it.apiType}" }
+        for ((label, path) in checks) {
+            out += try {
+                val l = api.getFirstPage("$path?page[limit]=50")
+                DiagItem(
+                    label,
+                    !l.omitted,
+                    "${l.data.size}${if (l.hasMore) "+" else ""} Einträge" +
+                        if (l.omitted) " – einige AUSGEBLENDET: fehlende Rechte (Rolle/Scope)" else "",
+                )
+            } catch (e: ApiException) {
+                DiagItem(label, false, (e.message ?: "Fehler") + if (e.code == 404) " – Modul in farmOS nicht installiert" else "")
+            } catch (e: Exception) {
+                DiagItem(label, false, describe(e))
+            }
+        }
+        return out
     }
 
     private fun JsonObject.toLocation(

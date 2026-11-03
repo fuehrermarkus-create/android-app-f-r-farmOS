@@ -39,8 +39,17 @@ class Prefs(context: Context) {
         get() = sp.getLong("last_sync", 0L)
         set(v) = sp.edit().putLong("last_sync", v).apply()
 
+    /** Letzter Fehler beim Abgleich (bleibt sichtbar, bis ein Abgleich klappt). */
+    var lastSyncError: String?
+        get() = sp.getString("last_sync_error", null)
+        set(v) = sp.edit().putString("last_sync_error", v).apply()
+
+    var lastSyncErrorAt: Long
+        get() = sp.getLong("last_sync_error_at", 0L)
+        set(v) = sp.edit().putLong("last_sync_error_at", v).apply()
+
     val isLoggedIn: Boolean
-        get() = serverUrl.isNotBlank() && refreshToken != null
+        get() = serverUrl.isNotBlank() && (refreshToken != null || accessToken != null)
 
     fun logout() {
         sp.edit()
@@ -48,6 +57,8 @@ class Prefs(context: Context) {
             .remove("refresh_token")
             .remove("token_expiry")
             .remove("last_sync")
+            .remove("last_sync_error")
+            .remove("last_sync_error_at")
             .apply()
     }
 }

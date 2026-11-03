@@ -36,6 +36,9 @@ fun SettingsScreen(vm: MainViewModel) {
     val ops by vm.pendingOps.collectAsState()
     val syncing by vm.syncing.collectAsState()
     val lastSync by vm.lastSync.collectAsState()
+    val lastError by vm.lastError.collectAsState()
+    val diag by vm.diag.collectAsState()
+    val diagRunning by vm.diagRunning.collectAsState()
     var confirmLogout by remember { mutableStateOf(false) }
     val open = ops.count { !it.failed }
     val failed = ops.filter { it.failed }
@@ -49,11 +52,45 @@ fun SettingsScreen(vm: MainViewModel) {
                         InfoRow("Benutzer", vm.prefs.username)
                         InfoRow("Letzter Abgleich", if (lastSync > 0) formatDateTime(lastSync / 1000) else "noch nie")
                         InfoRow("Wartend", "$open Änderung(en)")
+                        if (lastError != null) {
+                            Text(
+                                "Letzter Fehler: $lastError",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Button(onClick = { vm.sync() }, enabled = !syncing) {
                                 Text(if (syncing) "Läuft …" else "Jetzt synchronisieren")
                             }
                             OutlinedButton(onClick = { confirmLogout = true }) { Text("Abmelden") }
+                        }
+                        OutlinedButton(onClick = { vm.runDiagnose() }, enabled = !diagRunning) {
+                            Text(if (diagRunning) "Teste …" else "Verbindung testen")
+                        }
+                    }
+                }
+            }
+
+            diag?.let { results ->
+                item {
+                    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("Verbindungstest", style = MaterialTheme.typography.titleSmall)
+                            results.forEach { r ->
+                                Row {
+                                    Text(if (r.ok) "✅ " else "❌ ")
+                                    Column {
+                                        Text(r.title, style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            r.detail,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = if (r.ok) MaterialTheme.colorScheme.outline
+                                            else MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }

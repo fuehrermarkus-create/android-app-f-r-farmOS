@@ -53,9 +53,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun location(id: String) = repo.location(id)
     fun logsFor(id: String) = repo.logsFor(id)
 
-    init {
-        if (prefs.isLoggedIn) sync(quiet = true)
-    }
 
     fun consumeMessage() { _message.value = null }
 
@@ -103,6 +100,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---------------------------------------------------------------- Sync
 
+    private val _lastError = MutableStateFlow(prefs.lastSyncError)
+    val lastError: StateFlow<String?> = _lastError.asStateFlow()
+
+    private fun rememberError(text: String?) {
+        prefs.lastSyncError = text
+        prefs.lastSyncErrorAt = if (text != null) System.currentTimeMillis() else 0L
+        _lastError.value = text
+    }
+
     fun sync(quiet: Boolean = false) {
         if (_syncing.value) return
         viewModelScope.launch {
@@ -114,19 +120,48 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     _loggedIn.value = false
                     _message.value = "Sitzung abgelaufen – bitte neu anmelden"
                 } else if (r.offline) {
+                    rememberError(r.error ?: "Server nicht erreichbar")
                     if (!quiet) _message.value = "Offline – Änderungen werden später übertragen"
                 } else if (r.error != null) {
+                    rememberError(r.error)
                     _message.value = r.error
-                } else if (!quiet) {
-                    _message.value = if (r.pushed > 0) "${r.pushed} Änderung(en) hochgeladen, Daten aktuell"
-                    else "Daten aktuell"
+                } else {
+                    rememberError(null)
+                    if (!quiet) {
+                        _message.value = if (r.pushed > 0) "${r.pushed} Änderung(en) hochgeladen, Daten aktuell"
+                        else "Daten aktuell"
+                    }
                 }
             } catch (e: NotLoggedInException) {
                 _loggedIn.value = false
             } catch (e: Exception) {
-                _message.value = Repository.describe(e)
+                val text = Repository.describe(e)
+                rememberError(text)
+                _message.value = text
             } finally {
                 _syncing.value = false
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------- Verbindung testen
+
+    private val _diag = MutableStateFlow<List<Repository.DiagItem>?>(null)
+    val diag: StateFlow<List<Repository.DiagItem>?> = _diag.asStateFlow()
+    private val _diagRunning = MutableStateFlow(false)
+    val diagRunning: StateFlow<Boolean> = _diagRunning.asStateFlow()
+
+    fun runDiagnose() {
+        if (_diagRunning.value) return
+        viewModelScope.launch {
+            _diagRunning.value = true
+            _diag.value = null
+            try {
+                _diag.value = repo.diagnose()
+            } catch (e: Exception) {
+                _diag.value = listOf(Repository.DiagItem("Test", false, Repository.describe(e)))
+            } finally {
+                _diagRunning.value = false
             }
         }
     }
@@ -176,5 +211,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (draft.photos.isNotEmpty()) "${draft.photos.size} Foto(s) gespeichert" else "${draft.kind.label} gespeichert"
             )
         }
+    }
+
+    // Muss am Ende stehen, damit alle Felder schon initialisiert sind.
+    init {
+        if (prefs.isLoggedIn) sync(quiet = true)
     }
 }

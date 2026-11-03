@@ -30,7 +30,13 @@ class ApiException(val code: Int, message: String) : Exception(message) {
 class NotLoggedInException : Exception("Nicht angemeldet")
 
 /** Ergebnis einer Listenabfrage inkl. mitgeladener Objekte (include=...). */
-class ApiList(val data: List<JsonObject>, val included: Map<String, JsonObject>)
+class ApiList(
+    val data: List<JsonObject>,
+    val included: Map<String, JsonObject>,
+    /** farmOS hat Einträge ausgeblendet, weil Rechte fehlen. */
+    val omitted: Boolean = false,
+    val hasMore: Boolean = false,
+)
 
 /**
  * Zugriff auf die farmOS-API (JSON:API unter /api, OAuth2 unter /oauth/token).
@@ -108,9 +114,13 @@ class FarmApi(private val prefs: Prefs) {
     }
 
     suspend fun validToken(): String = tokenMutex.withLock {
-        if (prefs.refreshToken == null) throw NotLoggedInException()
         val at = prefs.accessToken
         if (at == null || System.currentTimeMillis() >= prefs.tokenExpiry) {
+            if (prefs.refreshToken == null) {
+                // Server liefert kein Refresh-Token (Grant „Refresh token“ fehlt beim Consumer).
+                prefs.logout()
+                throw NotLoggedInException()
+            }
             refresh()
         }
         prefs.accessToken ?: throw NotLoggedInException()
@@ -160,7 +170,13 @@ class FarmApi(private val prefs: Prefs) {
             }
             if (!ok) throw ApiException(code, errorMessage(code, text))
             if (text.isBlank()) return null
-            return json.parseToJsonElement(text).jsonObject
+            return runCatching { json.parseToJsonElement(text).jsonObject }.getOrElse {
+                throw ApiException(
+                    code,
+                    "Antwort ist kein JSON (PHP-Fehler oder falsche Adresse?): " +
+                        text.trim().take(160).replace(Regex("\\s+"), " "),
+                )
+            }
         }
     }
 
@@ -178,8 +194,10 @@ class FarmApi(private val prefs: Prefs) {
         val included = mutableMapOf<String, JsonObject>()
         var next: String? = path
         var pages = 0
+        var omitted = false
         while (next != null && pages < maxPages) {
             val page = call("GET", next, null) ?: break
+            if ((page["meta"] as? JsonObject)?.get("omitted") != null) omitted = true
             (page["data"] as? JsonArray)?.forEach { out.add(it.jsonObject) }
             (page["included"] as? JsonArray)?.forEach { el ->
                 val o = el.jsonObject
@@ -188,7 +206,16 @@ class FarmApi(private val prefs: Prefs) {
             next = (page["links"] as? JsonObject)?.get("next")?.let { it as? JsonObject }?.str("href")
             pages++
         }
-        return ApiList(out, included)
+        return ApiList(out, included, omitted, hasMore = next != null)
+    }
+
+    /** Anfrage ohne Anmeldung – nur für „Verbindung testen“. Liefert Status, Inhaltstyp, Textanfang. */
+    suspend fun rawGet(path: String): Triple<Int, String, String> = withContext(Dispatchers.IO) {
+        val req = Request.Builder().url(prefs.serverUrl + path)
+            .header("Accept", "application/vnd.api+json").get().build()
+        client.newCall(req).execute().use { resp ->
+            Triple(resp.code, resp.header("Content-Type").orEmpty(), resp.body?.string().orEmpty().take(400))
+        }
     }
 
     /** Lädt nur die erste Seite. */
