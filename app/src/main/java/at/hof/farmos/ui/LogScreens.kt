@@ -254,7 +254,7 @@ fun QuickLogScreen(
                 importing++
                 val r = withContext(Dispatchers.IO) {
                     val f = File(path)
-                    val res = PhotoStore.import(ctx, Uri.fromFile(f))
+                    val res = runCatching { PhotoStore.import(ctx, Uri.fromFile(f)) }.getOrNull()
                     f.delete()
                     res
                 }
@@ -278,7 +278,7 @@ fun QuickLogScreen(
         if (uris.isNotEmpty()) scope.launch {
             importing += uris.size
             for (u in uris) {
-                val r = withContext(Dispatchers.IO) { PhotoStore.import(ctx, u) }
+                val r = withContext(Dispatchers.IO) { runCatching { PhotoStore.import(ctx, u) }.getOrNull() }
                 importing--
                 handleImported(r)
             }

@@ -52,7 +52,8 @@ object PhotoStore {
         val takenAt = exif?.let { readTime(it) }
 
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return null
+        // Achtung: Mit inJustDecodeBounds liefert decodeStream absichtlich null – nur die Maße werden gefüllt.
+        resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
         var sample = 1
