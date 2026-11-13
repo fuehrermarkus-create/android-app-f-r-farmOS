@@ -13,8 +13,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -52,8 +53,12 @@ fun PhotoThumbs(
 ) {
     if (urls.isEmpty()) return
     var open by remember { mutableStateOf<String?>(null) }
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = contentPadding) {
-        itemsIndexed(urls) { i, url ->
+    // Bewusst kein LazyRow: steckt in ListItems/Dialogen, die Größen vorab abfragen (sonst Absturz).
+    Row(
+        Modifier.horizontalScroll(rememberScrollState()).padding(contentPadding),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        urls.forEachIndexed { i, url ->
             Box {
                 AsyncImage(
                     model = url,

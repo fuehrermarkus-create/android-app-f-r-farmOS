@@ -25,6 +25,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -38,6 +40,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import at.hof.farmos.data.LogKind
 import at.hof.farmos.ui.AnimalDetailScreen
+import at.hof.farmos.ui.CrashScreen
 import at.hof.farmos.ui.AnimalListScreen
 import at.hof.farmos.ui.AnimalNewScreen
 import at.hof.farmos.ui.FarmTheme
@@ -55,9 +58,15 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             FarmTheme {
-                val vm: MainViewModel = viewModel()
-                val loggedIn by vm.loggedIn.collectAsState()
-                if (loggedIn) AppRoot(vm) else LoginScreen(vm)
+                var crash by remember { mutableStateOf(CrashLog.read(this)) }
+                val report = crash
+                if (report != null) {
+                    CrashScreen(report, onContinue = { CrashLog.clear(this); crash = null })
+                } else {
+                    val vm: MainViewModel = viewModel()
+                    val loggedIn by vm.loggedIn.collectAsState()
+                    if (loggedIn) AppRoot(vm) else LoginScreen(vm)
+                }
             }
         }
     }

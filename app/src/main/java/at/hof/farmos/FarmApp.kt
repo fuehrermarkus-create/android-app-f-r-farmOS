@@ -20,11 +20,12 @@ class FarmApp : Application(), ImageLoaderFactory {
 
     override fun onCreate() {
         super.onCreate()
+        CrashLog.install(this)
         prefs = Prefs(this)
         api = FarmApi(prefs)
         val db = FarmDatabase.create(this)
         repository = Repository(api, db.dao(), prefs, PhotoStore.dir(this))
-        SyncWorker.schedulePeriodic(this)
+        runCatching { SyncWorker.schedulePeriodic(this) }
     }
 
     /** Bilder vom eigenen Server werden mit Zugriffstoken geladen. */

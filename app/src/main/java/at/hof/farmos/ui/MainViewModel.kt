@@ -92,7 +92,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun logout() {
-        viewModelScope.launch {
+        safeLaunch("Abmelden") {
             repo.logout()
             _loggedIn.value = false
         }
@@ -166,17 +166,31 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Startet eine Aktion; Fehler werden als Meldung angezeigt statt die App abstürzen zu lassen. */
+    private fun safeLaunch(what: String, block: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                android.util.Log.e("farmOSHof", what, e)
+                _message.value = "$what fehlgeschlagen: ${e.message ?: e.javaClass.simpleName}"
+            }
+        }
+    }
+
     private fun afterLocalChange(text: String) {
         _message.value = text
         SyncWorker.syncSoon(getApplication())
     }
 
     fun retryFailed() {
-        viewModelScope.launch { repo.retryFailed(); sync() }
+        safeLaunch("Erneut versuchen") { repo.retryFailed(); sync() }
     }
 
     fun discard(op: PendingOp) {
-        viewModelScope.launch { repo.discardOp(op) }
+        safeLaunch("Verwerfen") { repo.discardOp(op) }
     }
 
     // ---------------------------------------------------------------- Anlegen
@@ -191,15 +205,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         typeName: String,
         notes: String?,
     ) {
-        viewModelScope.launch {
-            val tid = typeId ?: repo.createAnimalType(newTypeName!!.trim())
+        safeLaunch("Tier speichern") {
+            val tid = typeId ?: repo.createAnimalType(newTypeName.orEmpty().trim().ifBlank { "Tier" })
             repo.createAnimal(name.trim(), sex, birthdate, idTag, tid, typeName, notes)
             afterLocalChange("Tier „${name.trim()}“ gespeichert")
         }
     }
 
     fun createLog(draft: LogDraft, exifDescription: String) {
-        viewModelScope.launch {
+        safeLaunch("Eintrag speichern") {
             // Endgültige Zeit, Position und Zuordnung in die Bilddateien schreiben
             withContext(Dispatchers.IO) {
                 draft.photos.forEach { path ->

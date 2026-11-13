@@ -1,6 +1,8 @@
 package at.hof.farmos.ui
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -137,15 +139,16 @@ fun <T> PickerDialog(
         text = {
             Column {
                 if (items.size > 8) SearchField(query) { query = it }
-                LazyColumn(Modifier.heightIn(max = 400.dp)) {
-                    if (allowNone) item {
+                // Bewusst Column statt LazyColumn: AlertDialog fragt Größen vorab ab (sonst Absturz).
+                Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                    if (allowNone) {
                         Row(Modifier.fillMaxWidth().clickable { onSelect(null) },
                             verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = selected == null, onClick = { onSelect(null) })
                             Text("– keine –")
                         }
                     }
-                    items(filtered) { item ->
+                    filtered.forEach { item ->
                         Row(Modifier.fillMaxWidth().clickable { onSelect(item) },
                             verticalAlignment = Alignment.CenterVertically) {
                             RadioButton(selected = item == selected, onClick = { onSelect(item) })
@@ -183,8 +186,8 @@ fun <T> MultiPickerDialog(
                     TextButton(onClick = { chosen = chosen + filtered.map(key) }) { Text("Alle") }
                     TextButton(onClick = { chosen = emptySet() }) { Text("Keine") }
                 }
-                LazyColumn(Modifier.heightIn(max = 400.dp)) {
-                    items(filtered, key = key) { item ->
+                Column(Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                    filtered.forEach { item ->
                         val k = key(item)
                         val toggle = { chosen = if (k in chosen) chosen - k else chosen + k }
                         Row(Modifier.fillMaxWidth().clickable { toggle() },

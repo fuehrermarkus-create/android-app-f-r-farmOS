@@ -14,8 +14,8 @@ android {
         applicationId = "at.hof.farmos"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.2.1"
+        versionCode = 5
+        versionName = "1.2.2"
     }
 
     // Fester Schlüssel, damit Updates über die alte Version installiert werden
