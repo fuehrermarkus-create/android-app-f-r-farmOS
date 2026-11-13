@@ -4,7 +4,10 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import at.hof.farmos.FarmApp
+import at.hof.farmos.data.BLUEH_FLAG
+import at.hof.farmos.data.FieldWorkDraft
 import at.hof.farmos.data.LogDraft
+import at.hof.farmos.data.db.LocationEntity
 import at.hof.farmos.photo.PhotoStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -46,6 +49,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val locations = share(repo.locations)
     val animalTypes = share(repo.animalTypes)
     val categories = share(repo.categories)
+    val plantTypes = share(repo.plantTypes)
+    val materials = share(repo.materials)
+    val flags = share(repo.flags)
     val recentLogs = share(repo.recentLogs)
     val pendingOps = share(repo.pendingOps)
 
@@ -209,6 +215,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val tid = typeId ?: repo.createAnimalType(newTypeName.orEmpty().trim().ifBlank { "Tier" })
             repo.createAnimal(name.trim(), sex, birthdate, idTag, tid, typeName, notes)
             afterLocalChange("Tier „${name.trim()}“ gespeichert")
+        }
+    }
+
+    fun createFieldWork(draft: FieldWorkDraft) {
+        safeLaunch("${draft.work.label} speichern") {
+            withContext(Dispatchers.IO) {
+                draft.photos.forEach { path ->
+                    PhotoStore.writeMeta(path, draft.timestamp, null, null, "${draft.work.label} ${draft.field?.name.orEmpty()}")
+                }
+            }
+            repo.createFieldWork(draft)
+            afterLocalChange("${draft.work.label} gespeichert")
+        }
+    }
+
+    /** Fläche als Blühfläche markieren bzw. Markierung entfernen. */
+    fun setBluehflaeche(location: LocationEntity, on: Boolean) {
+        safeLaunch("Markierung") {
+            repo.setFlag(location, BLUEH_FLAG, on)
+            afterLocalChange(if (on) "„${location.name}“ als Blühfläche markiert" else "Blühflächen-Markierung entfernt")
         }
     }
 

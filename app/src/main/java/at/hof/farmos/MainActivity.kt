@@ -38,7 +38,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import at.hof.farmos.data.FieldWork
 import at.hof.farmos.data.LogKind
+import at.hof.farmos.ui.FieldWorkScreen
+import at.hof.farmos.ui.NewEntryScreen
 import at.hof.farmos.ui.AnimalDetailScreen
 import at.hof.farmos.ui.CrashScreen
 import at.hof.farmos.ui.AnimalListScreen
@@ -80,6 +83,9 @@ private val tabs = listOf(
     Tab("logs", "Einträge", Icons.Default.Description),
     Tab("settings", "Sync", Icons.Default.Sync),
 )
+
+private fun fieldWorkRoute(work: FieldWork, field: String? = null, plants: List<String> = emptyList()) =
+    "fieldwork?work=${work.name}&field=${field ?: ""}&plants=${plants.joinToString(",")}"
 
 private fun quickLogRoute(
     animals: List<String> = emptyList(),
@@ -159,8 +165,35 @@ private fun AppRoot(vm: MainViewModel) {
             composable("logs") {
                 LogListScreen(
                     vm,
-                    onNew = { nav.navigate(quickLogRoute()) },
+                    onNew = { nav.navigate("new") },
                     onPhoto = { nav.navigate(quickLogRoute(camera = true)) },
+                )
+            }
+            composable("new") {
+                // Nach der Auswahl ersetzt das Formular diese Seite (Zurück führt zur Liste).
+                val replace: (String) -> Unit = { r -> nav.navigate(r) { popUpTo("new") { inclusive = true } } }
+                NewEntryScreen(
+                    onBack = { nav.popBackStack() },
+                    onFieldWork = { w -> replace(fieldWorkRoute(w)) },
+                    onQuickLog = { k, cam -> replace(quickLogRoute(kind = k, camera = cam)) },
+                    onNewAnimal = { replace("animal_new") },
+                )
+            }
+            composable(
+                "fieldwork?work={work}&field={field}&plants={plants}",
+                arguments = listOf(
+                    navArgument("work") { type = NavType.StringType; defaultValue = FieldWork.SPRAYING.name },
+                    navArgument("field") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("plants") { type = NavType.StringType; defaultValue = "" },
+                ),
+            ) { e ->
+                val a = e.arguments
+                FieldWorkScreen(
+                    vm,
+                    work = FieldWork.entries.firstOrNull { it.name == a?.getString("work") } ?: FieldWork.SPRAYING,
+                    preField = a?.getString("field")?.ifBlank { null },
+                    prePlants = a?.getString("plants").orEmpty().split(",").filter { it.isNotBlank() },
+                    onDone = { nav.popBackStack() },
                 )
             }
             composable("settings") { SettingsScreen(vm) }
@@ -180,6 +213,8 @@ private fun AppRoot(vm: MainViewModel) {
                 LocationDetailScreen(
                     vm, id,
                     onBack = { nav.popBackStack() },
+                    onOpen = { nav.navigate("location/$it") },
+                    onFieldWork = { w, field, plants -> nav.navigate(fieldWorkRoute(w, field, plants)) },
                     onQuickLog = { kind, camera, isPlant ->
                         nav.navigate(
                             if (isPlant) quickLogRoute(plants = listOf(id), kind = kind, camera = camera)

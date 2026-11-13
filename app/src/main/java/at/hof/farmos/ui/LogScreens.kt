@@ -80,7 +80,7 @@ fun LogListScreen(vm: MainViewModel, onNew: () -> Unit, onPhoto: () -> Unit) {
     var filter by rememberSaveable { mutableStateOf<String?>(null) }
     var onlyPhotos by rememberSaveable { mutableStateOf(false) }
     val shown = logs.filter {
-        (filter == null || LogKind.labelFor(it.type, it.isMovement) == filter) &&
+        (filter == null || logLabel(it) == filter) &&
             (!onlyPhotos || it.imageUrls.isNotBlank())
     }
 
@@ -94,13 +94,14 @@ fun LogListScreen(vm: MainViewModel, onNew: () -> Unit, onPhoto: () -> Unit) {
             ExtendedFloatingActionButton(
                 onClick = onNew,
                 icon = { Icon(Icons.Default.Add, null) },
-                text = { Text("Schnell-Log") },
+                text = { Text("Neuer Eintrag") },
             )
         },
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
             if (syncing) LinearProgressIndicator(Modifier.fillMaxWidth())
-            KindChips(selected = filter, onSelect = { filter = it }, onlyPhotos = onlyPhotos,
+            KindChips(labels = logs.map { logLabel(it) }.distinct().sorted(), selected = filter,
+                onSelect = { filter = it }, onlyPhotos = onlyPhotos,
                 onTogglePhotos = { onlyPhotos = !onlyPhotos })
             if (shown.isEmpty()) {
                 EmptyHint("Noch keine Einträge", Icons.Default.Description)
@@ -116,6 +117,7 @@ fun LogListScreen(vm: MainViewModel, onNew: () -> Unit, onPhoto: () -> Unit) {
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun KindChips(
+    labels: List<String>,
     selected: String?,
     onSelect: (String?) -> Unit,
     onlyPhotos: Boolean,
@@ -127,9 +129,8 @@ private fun KindChips(
     ) {
         FilterChip(onlyPhotos, onTogglePhotos, { Text("📷 mit Fotos") })
         FilterChip(selected == null, { onSelect(null) }, { Text("Alle") })
-        LogKind.entries.forEach { k ->
-            FilterChip(selected == k.label, { onSelect(if (selected == k.label) null else k.label) },
-                { Text(k.label) })
+        labels.forEach { l ->
+            FilterChip(selected == l, { onSelect(if (selected == l) null else l) }, { Text(l) })
         }
     }
 }
@@ -156,6 +157,7 @@ fun QuickLogScreen(
     val plants = allLocations.filter { it.kind == "plant" }
 
     var kind by rememberSaveable { mutableStateOf(preKind ?: LogKind.OBSERVATION) }
+    var showKinds by rememberSaveable { mutableStateOf(preKind == null) }
     var animalIds by rememberSaveable { mutableStateOf<List<String>>(ArrayList(preAnimals.distinct())) }
     var plantIds by rememberSaveable { mutableStateOf<List<String>>(ArrayList(prePlants.distinct())) }
     var categoryIds by rememberSaveable { mutableStateOf<List<String>>(ArrayList()) }
@@ -308,7 +310,10 @@ fun QuickLogScreen(
         else -> hasSubjects || photos.isNotEmpty() || name.isNotBlank() || notes.isNotBlank()
     }
 
-    ScreenScaffold(title = if (startCamera || photos.isNotEmpty()) "Foto-Eintrag" else "Schnell-Log", onBack = onDone) { pad ->
+    ScreenScaffold(
+        title = if (startCamera || photos.isNotEmpty()) "Foto-Eintrag" else if (!showKinds) kind.label else "Eintrag",
+        onBack = onDone,
+    ) { pad ->
         Column(
             Modifier.padding(pad).fillMaxSize().imePadding().verticalScroll(rememberScrollState())
                 .padding(16.dp),
@@ -339,10 +344,19 @@ fun QuickLogScreen(
                 onRemove = { i -> photos = ArrayList(photos.filterIndexed { idx, _ -> idx != i }) },
             )
 
-            // ---- Art
-            Text("Art", style = MaterialTheme.typography.labelLarge)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LogKind.entries.forEach { k -> FilterChip(kind == k, { kind = k }, { Text(k.label) }) }
+            // ---- Art (nur auswählbar, wenn sie nicht schon vorgegeben ist)
+            if (showKinds) {
+                Text("Art", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LogKind.entries.filter { it != LogKind.SEEDING && it != LogKind.HARVEST }.forEach { k ->
+                        FilterChip(kind == k, { kind = k }, { Text(k.label) })
+                    }
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Art: ${kind.label}", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { showKinds = true }) { Text("ändern") }
+                }
             }
 
             // ---- Zuordnung

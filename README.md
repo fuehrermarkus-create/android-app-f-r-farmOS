@@ -110,3 +110,28 @@ app/src/main/java/at/hof/farmos/
 
 Vor dem Update in der alten Version unter *Sync* alles übertragen: Die lokale Datenbank wird beim Update
 neu angelegt. Danach einfach die neue APK über die alte installieren.
+
+## Feldarbeit und Blühflächen (ab 1.3)
+
+**Neuer Eintrag** (Tab „Einträge“ › „Neuer Eintrag“) fragt zuerst, *was* du tust, und zeigt dann nur die passenden Felder:
+
+| Arbeit | Wird in farmOS gespeichert als |
+|---|---|
+| Aussaat | neue Kultur (Plant-Asset, Kulturart) + Aussaat-Log, die Kultur steht danach auf dem Feld |
+| Pflanzenschutz | Gabe-Log (Input) mit Mittel, Aufwandmenge, Wasser, Fläche, Kategorie „Pflanzenschutz“ |
+| Düngung | Gabe-Log (Input) mit Dünger, Menge, Fläche, Kategorie „Düngung“ |
+| Ernte | Ernte-Log mit Menge, Kultur und Fläche |
+
+Mittel, Dünger, Kulturarten, Einheiten und Kategorien legt die App bei Bedarf selbst in farmOS an.
+Die Feldseite zeigt die Kulturen auf dem Feld und alle Arbeiten direkt zum Antippen.
+
+**Blühfläche markieren:** Auf der Seite einer Fläche den Schalter „🌼 Blühfläche“ antippen. Dafür nutzt die App
+eine farmOS-Markierung (Flag). Diese muss **einmal** in farmOS angelegt werden. Auf der Docker-VM:
+
+```bash
+sudo docker exec -u www-data farmos drush php:eval '\Drupal::entityTypeManager()->getStorage("flag")->create(["id"=>"bluehflaeche","label"=>"Blühfläche","entity_types"=>["asset"=>["land","plant"]]])->save(); echo "ok\n";'
+sudo docker exec -u www-data farmos drush cr
+```
+
+Danach sind Blühflächen auch in farmOS in den Flächenlisten als Markierung sichtbar und filterbar.
+Für die Aussaat muss in farmOS das Modul „Seeding log“ (Aussaat-Log) aktiv sein.

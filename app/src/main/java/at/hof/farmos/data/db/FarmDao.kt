@@ -141,21 +141,39 @@ abstract class FarmDao {
     @Query("SELECT * FROM logs WHERE pending = 1")
     abstract suspend fun pendingLogsNow(): List<LogEntity>
 
-    // ---------------------------------------------------------------- Kategorien
-    @Query("SELECT * FROM categories ORDER BY name COLLATE NOCASE")
-    abstract fun categories(): Flow<List<CategoryEntity>>
+    // ---------------------------------------------------------------- Begriffe / Markierungen
+    @Query("SELECT * FROM terms WHERE vocab = :vocab ORDER BY name COLLATE NOCASE")
+    abstract fun terms(vocab: String): Flow<List<TermEntity>>
 
-    @Query("DELETE FROM categories")
-    abstract suspend fun clearCategories()
+    @Query("SELECT * FROM terms WHERE vocab = :vocab")
+    abstract suspend fun termsNow(vocab: String): List<TermEntity>
+
+    @Query("DELETE FROM terms WHERE vocab = :vocab AND pending = 0")
+    abstract suspend fun clearSyncedTerms(vocab: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    abstract suspend fun upsertCategories(items: List<CategoryEntity>)
+    abstract suspend fun upsertTerms(items: List<TermEntity>)
 
     @Transaction
-    open suspend fun replaceCategories(items: List<CategoryEntity>) {
-        clearCategories()
-        upsertCategories(items)
+    open suspend fun replaceTerms(vocab: String, items: List<TermEntity>) {
+        clearSyncedTerms(vocab)
+        upsertTerms(items)
     }
+
+    @Query("UPDATE terms SET pending = 0 WHERE id = :id")
+    abstract suspend fun markTermSynced(id: String)
+
+    @Query("DELETE FROM terms WHERE id = :id AND pending = 1")
+    abstract suspend fun deletePendingTerm(id: String)
+
+    @Query("DELETE FROM terms")
+    abstract suspend fun wipeTerms()
+
+    @Query("UPDATE locations SET flags = :flags WHERE id = :id")
+    abstract suspend fun setFlags(id: String, flags: String)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun upsertLocation(item: LocationEntity)
 
     // ---------------------------------------------------------------- Abmelden
     @Query("DELETE FROM animals")
@@ -167,6 +185,6 @@ abstract class FarmDao {
 
     @Transaction
     open suspend fun wipeAll() {
-        wipeAnimals(); wipeLogs(); wipeTypes(); clearLocations(); clearOps(); clearCategories()
+        wipeAnimals(); wipeLogs(); wipeTypes(); clearLocations(); clearOps(); wipeTerms()
     }
 }

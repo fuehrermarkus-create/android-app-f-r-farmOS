@@ -94,14 +94,19 @@ fun InfoRow(label: String, value: String?) {
     }
 }
 
+/** Anzeige-Art eines Eintrags: Kategorie (z. B. „Pflanzenschutz“) vor der farmOS-Log-Art. */
+fun logLabel(log: LogEntity): String =
+    log.categoryNames.split(",").map { it.trim() }.firstOrNull { it.isNotBlank() }
+        ?: LogKind.labelFor(log.type, log.isMovement)
+
 @Composable
 fun LogRow(log: LogEntity) {
     ListItem(
-        headlineContent = { Text(log.name.ifBlank { LogKind.labelFor(log.type, log.isMovement) }) },
+        headlineContent = { Text(log.name.ifBlank { logLabel(log) }) },
         supportingContent = {
             Column {
                 Text(
-                    "${LogKind.labelFor(log.type, log.isMovement)} · ${formatDateTime(log.timestamp)}" +
+                    "${logLabel(log)} · ${formatDateTime(log.timestamp)}" +
                         if (log.hasGeo) " · 📍" else ""
                 )
                 if (!log.notes.isNullOrBlank()) Text(log.notes, maxLines = 2)

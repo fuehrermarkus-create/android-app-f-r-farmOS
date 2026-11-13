@@ -37,7 +37,15 @@ data class LocationEntity(
     val locationNames: String?, // bei Kulturen: wo sie stehen
     val status: String,
     val imageUrls: String = "",
-)
+    /** farmOS-Markierungen (Flags), kommagetrennt, z. B. "bluehflaeche" */
+    val flags: String = "",
+    /** bei Kulturen: IDs der Flächen, auf denen sie stehen (kommagetrennt) */
+    val locationIds: String = "",
+    /** Größe in Hektar (aus farmOS oder aus den Notizen, z. B. „1,6821 ha“) */
+    val areaHa: Double? = null,
+) {
+    fun flagList(): List<String> = flags.split(",").filter { it.isNotBlank() }
+}
 
 @Entity(tableName = "animal_types")
 data class AnimalTypeEntity(
@@ -46,10 +54,16 @@ data class AnimalTypeEntity(
     val pending: Boolean = false,
 )
 
-@Entity(tableName = "categories")
-data class CategoryEntity(
+/**
+ * Begriffe aus farmOS-Taxonomien (vocab = plant_type, material_type, unit, log_category)
+ * sowie verfügbare Markierungen (vocab = "flag", id = "flag:<name>").
+ */
+@Entity(tableName = "terms")
+data class TermEntity(
     @PrimaryKey val id: String,
+    val vocab: String,
     val name: String,
+    val pending: Boolean = false,
 )
 
 @Entity(tableName = "logs")
@@ -66,6 +80,8 @@ data class LogEntity(
     val imageUrls: String = "",
     val hasGeo: Boolean = false,
     val pending: Boolean = false,
+    /** Kategorien als Namen, kommagetrennt (z. B. "Pflanzenschutz") */
+    val categoryNames: String = "",
 )
 
 /** Warteschlange für Änderungen, die noch zum Server müssen. */
@@ -77,7 +93,7 @@ data class PendingOp(
     val path: String,
     val body: String,
     val description: String,
-    /** "animal", "animal_type", "log", "quantity", "upload" oder "attach" */
+    /** "animal", "animal_type", "log", "quantity", "upload", "attach", "term", "asset" oder "flag" */
     val entityKind: String,
     val entityId: String,
     val createdAt: Long = System.currentTimeMillis(),

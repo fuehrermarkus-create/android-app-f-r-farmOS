@@ -2,7 +2,7 @@ package at.hof.farmos.data
 
 import at.hof.farmos.data.db.AnimalEntity
 import at.hof.farmos.data.db.AnimalTypeEntity
-import at.hof.farmos.data.db.CategoryEntity
+import at.hof.farmos.data.db.TermEntity
 import at.hof.farmos.data.db.FarmDao
 import at.hof.farmos.data.db.LocationEntity
 import at.hof.farmos.data.db.LogEntity
@@ -31,10 +31,11 @@ import java.util.UUID
 enum class LogKind(val apiType: String, val label: String, val movement: Boolean = false) {
     OBSERVATION("observation", "Beobachtung"),
     MEDICAL("medical", "Behandlung"),
-    INPUT("input", "Fütterung/Gabe"),
+    INPUT("input", "Gabe/Fütterung"),
     ACTIVITY("activity", "Aktivität"),
     MOVEMENT("activity", "Umstallen/Weide", movement = true),
-    HARVEST("harvest", "Ernte");
+    HARVEST("harvest", "Ernte"),
+    SEEDING("seeding", "Aussaat");
 
     companion object {
         fun labelFor(apiType: String, movement: Boolean): String =
@@ -67,6 +68,43 @@ data class LogDraft(
     val attachPhotosToAssets: Boolean = false,
 )
 
+/** Arbeiten auf dem Feld – jede bekommt ein eigenes, passendes Formular. */
+enum class FieldWork(val label: String, val logType: String, val category: String) {
+    SEEDING("Aussaat", "seeding", "Aussaat"),
+    SPRAYING("Pflanzenschutz", "input", "Pflanzenschutz"),
+    FERTILIZING("Düngung", "input", "Düngung"),
+    HARVEST("Ernte", "harvest", "Ernte"),
+}
+
+/** Menge mit Einheit, z. B. 2,5 + "l/ha". */
+data class Amount(val value: String, val unit: String)
+
+data class FieldWorkDraft(
+    val work: FieldWork,
+    val field: AssetRef?,                 // Fläche (land) oder Gebäude
+    val timestamp: Long,
+    val notes: String?,
+    val cropName: String? = null,         // Aussaat: Kultur, z. B. "Winterweizen"
+    val variety: String? = null,          // Aussaat: Sorte
+    val plants: List<AssetRef> = emptyList(), // vorhandene Kulturen auf dem Feld
+    val material: String? = null,         // Mittel bzw. Dünger
+    val amount: Amount? = null,
+    val water: Amount? = null,            // Pflanzenschutz: Wasseraufwand
+    val treatedHa: String? = null,        // behandelte Fläche in ha
+    val reason: String? = null,           // Pflanzenschutz: Grund / Schaderreger
+    val photos: List<String> = emptyList(),
+)
+
+/** Einheiten mit passender farmOS-Messgröße. */
+val UNIT_MEASURE = linkedMapOf(
+    "kg/ha" to "rate", "l/ha" to "rate", "m³/ha" to "rate", "t/ha" to "rate", "dt/ha" to "rate",
+    "Körner/m²" to "rate", "kg" to "weight", "dt" to "weight", "t" to "weight",
+    "l" to "volume", "m³" to "volume", "Stk" to "count", "Ballen" to "count", "ha" to "area",
+)
+
+/** farmOS-Markierung für Blühflächen (muss in farmOS angelegt sein, siehe README). */
+const val BLUEH_FLAG = "bluehflaeche"
+
 data class SyncResult(val pushed: Int, val failed: Int, val error: String?, val offline: Boolean)
 
 class Repository(
@@ -78,7 +116,10 @@ class Repository(
     val animals = dao.animals()
     val locations = dao.locations()
     val animalTypes = dao.animalTypes()
-    val categories = dao.categories()
+    val categories = dao.terms("log_category")
+    val plantTypes = dao.terms("plant_type")
+    val materials = dao.terms("material_type")
+    val flags = dao.terms("flag")
     val recentLogs = dao.recentLogs()
     val pendingOps = dao.pendingOps()
     fun animal(id: String) = dao.animal(id)
@@ -165,6 +206,7 @@ class Repository(
             "animal" -> dao.markAnimalSynced(op.entityId)
             "animal_type" -> dao.markTypeSynced(op.entityId)
             "log" -> dao.markLogSynced(op.entityId)
+            "term" -> dao.markTermSynced(op.entityId)
         }
     }
 
@@ -175,6 +217,7 @@ class Repository(
             "animal" -> dao.deletePendingAnimal(op.entityId)
             "animal_type" -> dao.deletePendingType(op.entityId)
             "log" -> dao.deletePendingLog(op.entityId)
+            "term" -> dao.deletePendingTerm(op.entityId)
             "upload" -> {
                 // Verweis auf das Foto aus abhängigen Einträgen entfernen, damit diese trotzdem ankommen.
                 val ref = Regex(",?\\{\"type\":\"file--file\",\"id\":\"" +
@@ -233,11 +276,31 @@ class Repository(
         dao.replaceTypes(types)
         val typeNames = types.associate { it.id to it.name }
 
-        // Log-Kategorien
-        val cats = fetch("Kategorien", "/api/taxonomy_term/log_category?page[limit]=50").data.map {
-            CategoryEntity(it.str("id")!!, it.attributes.str("name") ?: "?")
+        // Begriffe: Kategorien, Kulturarten, Mittel/Dünger, Einheiten
+        val termNames = mutableMapOf<String, String>()
+        for ((vocab, label) in listOf(
+            "log_category" to "Kategorien", "plant_type" to "Kulturarten",
+            "material_type" to "Mittel/Dünger", "unit" to "Einheiten",
+        )) {
+            val list = fetch(label, "/api/taxonomy_term/$vocab?page[limit]=50").data.map {
+                TermEntity(it.str("id")!!, vocab, it.attributes.str("name") ?: "?")
+            }
+            dao.replaceTerms(vocab, list)
+            list.forEach { termNames[it.id] = it.name }
         }
-        dao.replaceCategories(cats)
+
+        // Verfügbare Markierungen (Flags) für Flächen
+        val flagList = runCatching { fetch("Markierungen", "/api/flag/flag").data }.getOrElse {
+            if (FarmApi.isNetworkError(it)) throw it else emptyList()
+        }.mapNotNull { o ->
+            val a = o.attributes
+            val machine = a.str("drupal_internal__id") ?: return@mapNotNull null
+            val forAssets = (a.obj("entity_types")?.get("asset") as? JsonArray)
+                ?.mapNotNull { (it as? JsonPrimitive)?.content }
+            if (forAssets != null && forAssets.none { it == "all" || it == "land" }) return@mapNotNull null
+            TermEntity("flag:$machine", "flag", a.str("label") ?: machine)
+        }
+        dao.replaceTerms("flag", flagList)
 
         // Flächen und Gebäude
         val landList = fetch("Flächen", "/api/asset/land?filter[status]=active&page[limit]=50&include=image")
@@ -247,8 +310,7 @@ class Repository(
         val locNames = (lands + structures).associate { it.id to it.name }
 
         // Kulturen (Pflanzungen) mit Kulturart
-        val plantTypes = fetch("Kulturarten", "/api/taxonomy_term/plant_type?page[limit]=50").data
-            .associate { it.str("id")!! to (it.attributes.str("name") ?: "?") }
+        val plantTypes = termNames
         val plantList = fetch("Kulturen", "/api/asset/plant?filter[status]=active&page[limit]=50&include=image")
         val plants = plantList.data.map { o ->
             val a = o.attributes
@@ -264,6 +326,7 @@ class Repository(
                     .joinToString(", ").ifBlank { null },
                 status = a.str("status") ?: "active",
                 imageUrls = imageUrls(o, plantList.included),
+                locationIds = o.relationIds("location").joinToString(","),
             )
         }
         dao.replaceLocations(lands + structures + plants)
@@ -310,6 +373,7 @@ class Repository(
                     locationIds = o.relationIds("location").joinToString(","),
                     imageUrls = imageUrls(o, page.included),
                     hasGeo = !a.textField("geometry").isNullOrBlank(),
+                    categoryNames = o.relationIds("category").mapNotNull { termNames[it] }.joinToString(", "),
                 )
             }
         }
@@ -371,6 +435,10 @@ class Repository(
             "Gebäude" to "/api/asset/structure",
             "Kulturen" to "/api/asset/plant",
             "Kategorien" to "/api/taxonomy_term/log_category",
+            "Kulturarten" to "/api/taxonomy_term/plant_type",
+            "Mittel/Dünger" to "/api/taxonomy_term/material_type",
+            "Einheiten" to "/api/taxonomy_term/unit",
+            "Markierungen" to "/api/flag/flag",
         ) + LogKind.entries.filter { !it.movement }.map { "Logs ${it.label}" to "/api/log/${it.apiType}" }
         for ((label, path) in checks) {
             out += try {
@@ -396,17 +464,25 @@ class Repository(
         included: Map<String, JsonObject>,
     ): LocationEntity {
         val a = attributes
-        val area = a.str("area")?.toDoubleOrNull()?.let { String.format(Locale.GERMAN, "%.2f ha", it / 10000.0) }
+        val notes = a.textField("notes")
+        // Fläche: aus farmOS (m²) oder aus den Notizen ("… 1,6821 ha …", z. B. aus dem MFA-Import)
+        val ha = a.str("area")?.toDoubleOrNull()?.let { it / 10000.0 }
+            ?: notes?.let { Regex("([0-9]+[.,][0-9]+|[0-9]+)\\s*ha").find(it)?.groupValues?.get(1) }
+                ?.replace(',', '.')?.toDoubleOrNull()
+        val area = ha?.let { String.format(Locale.GERMAN, "%.2f ha", it) }
+        val flagValues = (a["flag"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: emptyList()
         return LocationEntity(
             id = str("id")!!,
             kind = kind,
             name = a.str("name") ?: "?",
             subtype = a.str(subtypeField),
-            notes = a.textField("notes"),
+            notes = notes,
             areaInfo = area,
             locationNames = null,
             status = a.str("status") ?: "active",
             imageUrls = imageUrls(this, included),
+            flags = flagValues.joinToString(","),
+            areaHa = ha,
         )
     }
 
@@ -500,89 +576,150 @@ class Repository(
         )
     }
 
-    suspend fun createLog(d: LogDraft) {
-        val id = UUID.randomUUID().toString()
-        val kind = d.kind
+    // ---------------------------------------------------------------- Bausteine
 
-        // 1) Fotos hochladen (die Datei-ID kennt erst der Server -> Platzhalter im Log)
-        val photoKeys = d.photos.map { path ->
+    /** Sucht einen Begriff (Kulturart, Mittel, Einheit, Kategorie) oder legt ihn an. */
+    suspend fun ensureTerm(vocab: String, name: String): String {
+        val clean = name.trim()
+        dao.termsNow(vocab).firstOrNull { it.name.equals(clean, ignoreCase = true) }?.let { return it.id }
+        val id = UUID.randomUUID().toString()
+        val body = buildJsonObject {
+            putJsonObject("data") {
+                put("type", "taxonomy_term--$vocab")
+                put("id", id)
+                putJsonObject("attributes") { put("name", clean) }
+            }
+        }
+        dao.upsertTerms(listOf(TermEntity(id, vocab, clean, pending = true)))
+        dao.enqueue(
+            PendingOp(
+                method = "POST", path = "/api/taxonomy_term/$vocab", body = body.toString(),
+                description = "Begriff „$clean“", entityKind = "term", entityId = id,
+            )
+        )
+        return id
+    }
+
+    /**
+     * Legt eine Menge an. Mit [unitTerm] = true wird die Einheit als farmOS-Einheit
+     * (Taxonomie „unit“) gespeichert, sonst nur als Beschriftung.
+     */
+    private suspend fun enqueueQuantity(
+        value: String?,
+        unit: String?,
+        label: String?,
+        logName: String,
+        unitTerm: Boolean,
+    ): String? {
+        val qty = value?.replace(',', '.')?.trim()?.toBigDecimalOrNull() ?: return null
+        val q = qty.stripTrailingZeros().let { if (it.scale() < 0) it.setScale(0) else it }
+        val denominator = BigDecimal.TEN.pow(q.scale()).toBigInteger()
+        val unitId = if (unitTerm && !unit.isNullOrBlank()) ensureTerm("unit", unit) else null
+        val measure = unit?.let { UNIT_MEASURE[it.trim()] }
+        val text = when {
+            unitTerm -> label
+            !unit.isNullOrBlank() -> unit.trim()
+            else -> label
+        }
+        val id = UUID.randomUUID().toString()
+        val body = buildJsonObject {
+            putJsonObject("data") {
+                put("type", "quantity--standard")
+                put("id", id)
+                putJsonObject("attributes") {
+                    putJsonObject("value") {
+                        put("numerator", JsonPrimitive(q.unscaledValue()))
+                        put("denominator", JsonPrimitive(denominator))
+                        put("decimal", q.toPlainString())
+                    }
+                    if (!text.isNullOrBlank()) put("label", text)
+                    if (unitTerm && measure != null) put("measure", measure)
+                }
+                if (unitId != null) putJsonObject("relationships") {
+                    putJsonObject("units") {
+                        putJsonObject("data") { put("type", "taxonomy_term--unit"); put("id", unitId) }
+                    }
+                }
+            }
+        }
+        dao.enqueue(
+            PendingOp(
+                method = "POST", path = "/api/quantity/standard", body = body.toString(),
+                description = "Menge zu „$logName“", entityKind = "quantity", entityId = id,
+            )
+        )
+        return id
+    }
+
+    /** Alles, was ein Log braucht – gemeinsam für Schnell-Log und Feldarbeit. */
+    private class LogSpec(
+        val apiType: String,
+        val typeLabel: String,
+        val name: String,
+        val timestamp: Long,
+        val notes: String?,
+        val movement: Boolean = false,
+        val assets: List<AssetRef> = emptyList(),
+        val locations: List<AssetRef> = emptyList(),
+        val quantityIds: List<String> = emptyList(),
+        val photos: List<String> = emptyList(),
+        val latitude: Double? = null,
+        val longitude: Double? = null,
+        val categoryIds: List<String> = emptyList(),
+        val categoryNames: List<String> = emptyList(),
+        /** weitere Beziehungen, z. B. "material_type" -> [(taxonomy_term--material_type, id)] */
+        val extraRefs: Map<String, List<Pair<String, String>>> = emptyMap(),
+        val attachPhotosToAssets: Boolean = false,
+    )
+
+    private suspend fun enqueueLog(spec: LogSpec): String {
+        val id = UUID.randomUUID().toString()
+
+        // Fotos zuerst hochladen (die Datei-ID kennt erst der Server -> Platzhalter im Log)
+        val photoKeys = spec.photos.map { path ->
             val key = UUID.randomUUID().toString()
             dao.enqueue(
                 PendingOp(
-                    method = "UPLOAD", path = "/api/log/${kind.apiType}/image", body = path,
-                    description = "Foto zu „${d.name}“", entityKind = "upload", entityId = key,
+                    method = "UPLOAD", path = "/api/log/${spec.apiType}/image", body = path,
+                    description = "Foto zu „${spec.name}“", entityKind = "upload", entityId = key,
                 )
             )
             key
         }
 
-        // 2) Menge
-        var quantityId: String? = null
-        val qty = d.quantityValue?.replace(',', '.')?.trim()?.toBigDecimalOrNull()
-        if (qty != null) {
-            quantityId = UUID.randomUUID().toString()
-            val q = qty.stripTrailingZeros().let { if (it.scale() < 0) it.setScale(0) else it }
-            val denominator = BigDecimal.TEN.pow(q.scale()).toBigInteger()
-            val qBody = buildJsonObject {
-                putJsonObject("data") {
-                    put("type", "quantity--standard")
-                    put("id", quantityId)
-                    putJsonObject("attributes") {
-                        putJsonObject("value") {
-                            put("numerator", JsonPrimitive(q.unscaledValue()))
-                            put("denominator", JsonPrimitive(denominator))
-                            put("decimal", q.toPlainString())
-                        }
-                        if (!d.quantityUnit.isNullOrBlank()) put("label", d.quantityUnit.trim())
-                    }
-                }
-            }
-            dao.enqueue(
-                PendingOp(
-                    method = "POST", path = "/api/quantity/standard", body = qBody.toString(),
-                    description = "Menge zu „${d.name}“", entityKind = "quantity", entityId = quantityId,
-                )
-            )
+        fun refArray(list: List<Pair<String, String>>) = buildJsonArray {
+            list.forEach { (type, rid) -> add(buildJsonObject { put("type", type); put("id", rid) }) }
         }
 
-        // 3) Der Log selbst
+        val relations = mutableMapOf<String, List<Pair<String, String>>>()
+        if (spec.assets.isNotEmpty()) relations["asset"] = spec.assets.map { it.type to it.id }
+        if (spec.locations.isNotEmpty()) relations["location"] = spec.locations.map { it.type to it.id }
+        if (spec.quantityIds.isNotEmpty()) relations["quantity"] = spec.quantityIds.map { "quantity--standard" to it }
+        if (photoKeys.isNotEmpty()) relations["image"] = photoKeys.map { "file--file" to placeholder(it) }
+        if (spec.categoryIds.isNotEmpty()) {
+            relations["category"] = spec.categoryIds.map { "taxonomy_term--log_category" to it }
+        }
+        relations.putAll(spec.extraRefs)
+
         val body = buildJsonObject {
             putJsonObject("data") {
-                put("type", "log--${kind.apiType}")
+                put("type", "log--${spec.apiType}")
                 put("id", id)
                 putJsonObject("attributes") {
-                    put("name", d.name)
-                    put("timestamp", isoTime(d.timestamp))
+                    put("name", spec.name)
+                    put("timestamp", isoTime(spec.timestamp))
                     put("status", "done")
-                    if (kind.movement) put("is_movement", true)
-                    if (!d.notes.isNullOrBlank()) putJsonObject("notes") {
-                        put("value", d.notes); put("format", "default")
+                    if (spec.movement) put("is_movement", true)
+                    if (!spec.notes.isNullOrBlank()) putJsonObject("notes") {
+                        put("value", spec.notes); put("format", "default")
                     }
-                    if (d.latitude != null && d.longitude != null) putJsonObject("geometry") {
-                        put("value", wktPoint(d.latitude, d.longitude))
+                    if (spec.latitude != null && spec.longitude != null) putJsonObject("geometry") {
+                        put("value", wktPoint(spec.latitude, spec.longitude))
                     }
                 }
-                putJsonObject("relationships") {
-                    if (d.assets.isNotEmpty()) putJsonObject("asset") { put("data", refs(d.assets)) }
-                    if (d.locations.isNotEmpty()) putJsonObject("location") { put("data", refs(d.locations)) }
-                    if (quantityId != null) putJsonObject("quantity") {
-                        putJsonArray("data") {
-                            add(buildJsonObject { put("type", "quantity--standard"); put("id", quantityId) })
-                        }
-                    }
-                    if (photoKeys.isNotEmpty()) putJsonObject("image") {
-                        putJsonArray("data") {
-                            photoKeys.forEach { k ->
-                                add(buildJsonObject { put("type", "file--file"); put("id", placeholder(k)) })
-                            }
-                        }
-                    }
-                    if (d.categoryIds.isNotEmpty()) putJsonObject("category") {
-                        putJsonArray("data") {
-                            d.categoryIds.forEach { c ->
-                                add(buildJsonObject { put("type", "taxonomy_term--log_category"); put("id", c) })
-                            }
-                        }
+                if (relations.isNotEmpty()) putJsonObject("relationships") {
+                    relations.forEach { (rel, list) ->
+                        putJsonObject(rel) { put("data", refArray(list)) }
                     }
                 }
             }
@@ -590,26 +727,27 @@ class Repository(
         dao.upsertLogs(
             listOf(
                 LogEntity(
-                    id = id, type = kind.apiType, name = d.name, timestamp = d.timestamp,
-                    notes = d.notes?.ifBlank { null }, status = "done", isMovement = kind.movement,
-                    assetIds = d.assets.joinToString(",") { it.id },
-                    locationIds = d.locations.joinToString(",") { it.id },
-                    imageUrls = d.photos.joinToString("\n") { "file://$it" },
-                    hasGeo = d.latitude != null,
+                    id = id, type = spec.apiType, name = spec.name, timestamp = spec.timestamp,
+                    notes = spec.notes?.ifBlank { null }, status = "done", isMovement = spec.movement,
+                    assetIds = spec.assets.joinToString(",") { it.id },
+                    locationIds = spec.locations.joinToString(",") { it.id },
+                    imageUrls = spec.photos.joinToString("\n") { "file://$it" },
+                    hasGeo = spec.latitude != null,
                     pending = true,
+                    categoryNames = spec.categoryNames.joinToString(", "),
                 )
             )
         )
         dao.enqueue(
             PendingOp(
-                method = "POST", path = "/api/log/${kind.apiType}", body = body.toString(),
-                description = "${kind.label} „${d.name}“", entityKind = "log", entityId = id,
+                method = "POST", path = "/api/log/${spec.apiType}", body = body.toString(),
+                description = "${spec.typeLabel} „${spec.name}“", entityKind = "log", entityId = id,
             )
         )
 
-        // 4) Optional: Fotos zusätzlich direkt am Tier / an der Kultur ablegen
-        if (d.attachPhotosToAssets) {
-            for (asset in d.assets) for (path in d.photos) {
+        // Optional: Fotos zusätzlich direkt am Tier / an der Kultur ablegen
+        if (spec.attachPhotosToAssets) {
+            for (asset in spec.assets) for (path in spec.photos) {
                 dao.enqueue(
                     PendingOp(
                         method = "UPLOAD", path = "/api/asset/${asset.bundle}/${asset.id}/image", body = path,
@@ -619,6 +757,152 @@ class Repository(
                 )
             }
         }
+        return id
+    }
+
+    // ---------------------------------------------------------------- Schnell-Log
+
+    suspend fun createLog(d: LogDraft) {
+        val quantityId = enqueueQuantity(d.quantityValue, d.quantityUnit, null, d.name, unitTerm = false)
+        val catNames = dao.termsNow("log_category").filter { it.id in d.categoryIds }.map { it.name }
+        enqueueLog(
+            LogSpec(
+                apiType = d.kind.apiType, typeLabel = d.kind.label, name = d.name, timestamp = d.timestamp,
+                notes = d.notes, movement = d.kind.movement, assets = d.assets, locations = d.locations,
+                quantityIds = listOfNotNull(quantityId), photos = d.photos,
+                latitude = d.latitude, longitude = d.longitude,
+                categoryIds = d.categoryIds, categoryNames = catNames,
+                attachPhotosToAssets = d.attachPhotosToAssets,
+            )
+        )
+    }
+
+    // ---------------------------------------------------------------- Feldarbeit
+
+    suspend fun createFieldWork(d: FieldWorkDraft) {
+        val w = d.work
+        val fieldName = d.field?.name
+        val year = Instant.ofEpochSecond(d.timestamp).atZone(ZoneId.systemDefault()).year
+        val categoryId = ensureTerm("log_category", w.category)
+        val assets = d.plants.toMutableList()
+        val extra = mutableMapOf<String, List<Pair<String, String>>>()
+
+        // Aussaat: neue Kultur (farmOS „Plant“) anlegen, die dann auf dem Feld steht
+        if (w == FieldWork.SEEDING) {
+            val crop = d.cropName?.trim().orEmpty().ifBlank { "Kultur" }
+            val typeId = ensureTerm("plant_type", crop)
+            val plantId = UUID.randomUUID().toString()
+            val plantName = listOfNotNull(crop, d.variety?.trim()?.ifBlank { null }).joinToString(" ") +
+                (fieldName?.let { " – $it" } ?: "") + " $year"
+            val plantBody = buildJsonObject {
+                putJsonObject("data") {
+                    put("type", "asset--plant")
+                    put("id", plantId)
+                    putJsonObject("attributes") {
+                        put("name", plantName)
+                        put("status", "active")
+                        if (!d.variety.isNullOrBlank()) putJsonObject("notes") {
+                            put("value", "Sorte: ${d.variety.trim()}"); put("format", "default")
+                        }
+                    }
+                    putJsonObject("relationships") {
+                        putJsonObject("plant_type") {
+                            putJsonArray("data") {
+                                add(buildJsonObject { put("type", "taxonomy_term--plant_type"); put("id", typeId) })
+                            }
+                        }
+                    }
+                }
+            }
+            dao.enqueue(
+                PendingOp(
+                    method = "POST", path = "/api/asset/plant", body = plantBody.toString(),
+                    description = "Kultur „$plantName“", entityKind = "asset", entityId = plantId,
+                )
+            )
+            dao.upsertLocation(
+                LocationEntity(
+                    id = plantId, kind = "plant", name = plantName, subtype = crop, notes = null,
+                    areaInfo = null, locationNames = fieldName, status = "active",
+                    locationIds = d.field?.id.orEmpty(),
+                )
+            )
+            assets += AssetRef(plantId, "asset--plant", plantName)
+        }
+
+        // Mittel / Dünger
+        if ((w == FieldWork.SPRAYING || w == FieldWork.FERTILIZING) && !d.material.isNullOrBlank()) {
+            val matId = ensureTerm("material_type", d.material)
+            extra["material_type"] = listOf("taxonomy_term--material_type" to matId)
+        }
+
+        val title = buildString {
+            append(w.label)
+            when (w) {
+                FieldWork.SEEDING -> d.cropName?.let { append(" ").append(it.trim()) }
+                FieldWork.SPRAYING, FieldWork.FERTILIZING -> d.material?.takeIf { it.isNotBlank() }
+                    ?.let { append(": ").append(it.trim()) }
+                FieldWork.HARVEST -> if (d.plants.isNotEmpty()) append(": ").append(d.plants.joinToString(", ") { it.name })
+            }
+            fieldName?.let { append(" – ").append(it) }
+        }
+
+        val amountLabel = when (w) {
+            FieldWork.SEEDING -> "Saatmenge"
+            FieldWork.SPRAYING -> "Aufwandmenge"
+            FieldWork.FERTILIZING -> "Düngermenge"
+            FieldWork.HARVEST -> "Erntemenge"
+        }
+        val quantities = listOfNotNull(
+            d.amount?.let { enqueueQuantity(it.value, it.unit, amountLabel, title, unitTerm = true) },
+            d.water?.let { enqueueQuantity(it.value, it.unit, "Wasser", title, unitTerm = true) },
+            d.treatedHa?.let { enqueueQuantity(it, "ha", "Behandelte Fläche", title, unitTerm = true) },
+        )
+
+        val notes = listOfNotNull(
+            d.reason?.trim()?.ifBlank { null }?.let { "Grund: $it" },
+            d.notes?.trim()?.ifBlank { null },
+        ).joinToString("\n").ifBlank { null }
+
+        enqueueLog(
+            LogSpec(
+                apiType = w.logType, typeLabel = w.label, name = title, timestamp = d.timestamp,
+                notes = notes,
+                movement = w == FieldWork.SEEDING && d.field != null, // Kultur steht danach auf dem Feld
+                assets = assets,
+                locations = listOfNotNull(d.field),
+                quantityIds = quantities,
+                photos = d.photos,
+                categoryIds = listOf(categoryId),
+                categoryNames = listOf(w.category),
+                extraRefs = extra,
+            )
+        )
+    }
+
+    // ---------------------------------------------------------------- Markierung (z. B. Blühfläche)
+
+    suspend fun setFlag(location: LocationEntity, flag: String, on: Boolean) {
+        val current = location.flagList().toMutableList()
+        if (on && flag !in current) current += flag
+        if (!on) current.remove(flag)
+        dao.setFlags(location.id, current.joinToString(","))
+        val body = buildJsonObject {
+            putJsonObject("data") {
+                put("type", "asset--${location.kind}")
+                put("id", location.id)
+                putJsonObject("attributes") {
+                    putJsonArray("flag") { current.forEach { add(JsonPrimitive(it)) } }
+                }
+            }
+        }
+        dao.enqueue(
+            PendingOp(
+                method = "PATCH", path = "/api/asset/${location.kind}/${location.id}", body = body.toString(),
+                description = (if (on) "Markierung setzen: " else "Markierung entfernen: ") + location.name,
+                entityKind = "flag", entityId = location.id,
+            )
+        )
     }
 
     private fun refs(items: List<AssetRef>) = buildJsonArray {
