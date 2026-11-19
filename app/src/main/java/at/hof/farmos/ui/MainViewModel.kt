@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -51,7 +52,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val animals = share(repo.animals)
     val locations = share(repo.locations)
     val animalTypes = share(repo.animalTypes)
-    val categories = share(repo.categories)
+    /** Kategorien zur Auswahl – ohne die internen Listen-/Archiv-Kategorien */
+    val categories = share(repo.categories.map { l ->
+        l.filter { !it.name.startsWith(at.hof.farmos.data.LIST_PREFIX) && !it.name.startsWith(at.hof.farmos.data.ARCHIVE_PREFIX) }
+    })
     val plantTypes = share(repo.plantTypes)
     val materials = share(repo.materials)
     val flags = share(repo.flags)
@@ -122,6 +126,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         prefs.lastSyncError = text
         prefs.lastSyncErrorAt = if (text != null) System.currentTimeMillis() else 0L
         _lastError.value = text
+    }
+
+    /** Beim Öffnen der App: abgleichen, wenn der letzte Abgleich ein paar Minuten her ist. */
+    fun syncIfStale(maxAgeMs: Long = 3 * 60 * 1000L) {
+        _lastSync.value = prefs.lastSync
+        if (prefs.isLoggedIn && System.currentTimeMillis() - prefs.lastSync > maxAgeMs) sync(quiet = true)
     }
 
     fun sync(quiet: Boolean = false) {
@@ -285,35 +295,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun saveFieldList(id: String?, name: String, work: ListWork?, notes: String?, locationIds: List<String>, then: (String) -> Unit) {
         safeLaunch("Liste speichern") {
             val listId = repo.saveFieldList(id, name, work, notes, locationIds)
-            _message.value = "Liste „${name.trim()}“ gespeichert"
+            afterLocalChange("Liste „${name.trim()}“ gespeichert")
             then(listId)
         }
     }
 
-    fun createListFromLogs(name: String, work: ListWork?, doneAt: Map<String, Long>, then: (String) -> Unit) {
+    fun createListFromLogs(
+        name: String, work: ListWork?, entries: Map<String, Pair<Long, at.hof.farmos.data.db.LogEntity>>,
+        then: (String) -> Unit,
+    ) {
         safeLaunch("Liste erstellen") {
-            val id = repo.createListFromLogs(name, work, doneAt)
-            _message.value = "Liste mit ${doneAt.size} Feldern erstellt"
+            val id = repo.createListFromLogs(name, work, entries)
+            afterLocalChange("Liste mit ${entries.size} Feldern erstellt")
             then(id)
         }
     }
 
     fun setListItemDone(listId: String, locationId: String, done: Boolean) {
-        safeLaunch("Abhaken") { repo.setListItemDone(listId, locationId, done) }
+        safeLaunch("Abhaken") {
+            repo.setListItemDone(listId, locationId, done)
+            SyncWorker.syncSoon(getApplication())
+        }
     }
 
     fun setAllDone(listId: String) {
-        safeLaunch("Alle abhaken") { repo.setAllDone(listId) }
+        safeLaunch("Alle abhaken") {
+            repo.setAllDone(listId)
+            SyncWorker.syncSoon(getApplication())
+        }
     }
 
     fun deleteFieldList(id: String) {
-        safeLaunch("Liste löschen") { repo.deleteFieldList(id) }
-    }
-
-    fun logFieldList(list: FieldListEntity) {
-        safeLaunch("In farmOS eintragen") {
-            val n = repo.logFieldList(list)
-            afterLocalChange(if (n > 0) "$n Feld(er) in farmOS eingetragen" else "Nichts einzutragen")
+        safeLaunch("Liste löschen") {
+            repo.deleteFieldList(id)
+            SyncWorker.syncSoon(getApplication())
         }
     }
 

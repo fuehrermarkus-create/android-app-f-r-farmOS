@@ -11,6 +11,8 @@ import at.hof.farmos.data.db.LocationEntity
 import at.hof.farmos.data.db.LogEntity
 import at.hof.farmos.data.db.PendingOp
 import at.hof.farmos.data.db.urlList
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -136,6 +138,11 @@ val UNIT_MEASURE = linkedMapOf(
     "h" to "time",
 )
 
+/** Kategorie-Präfixe für geteilte Feldlisten und Kategorie für Positionen (Zufahrt). */
+const val LIST_PREFIX = "Liste: "
+const val ARCHIVE_PREFIX = "Archiv: "
+const val POSITION_CATEGORY = "Position"
+
 /** farmOS-Markierung für Blühflächen (muss in farmOS angelegt sein, siehe README). */
 const val BLUEH_FLAG = "bluehflaeche"
 
@@ -169,9 +176,17 @@ class Repository(
 
     // ================================================================ Synchronisation
 
+    /** Verhindert, dass App und Hintergrund-Abgleich gleichzeitig dasselbe hochladen. */
+    private val syncMutex = Mutex()
+
     /** Erst lokale Änderungen hochladen, dann aktuelle Daten vom Server holen. */
-    suspend fun sync(): SyncResult {
-        val push = pushPending()
+    suspend fun sync(): SyncResult = syncMutex.withLock { doSync() }
+
+    /** Nur hochladen (schnell, z. B. direkt nach dem Speichern). */
+    suspend fun pushPending(): SyncResult = syncMutex.withLock { doPush() }
+
+    private suspend fun doSync(): SyncResult {
+        val push = doPush()
         if (push.offline || push.error != null && push.pushed == 0 && dao.openOpCount() > 0) {
             return push
         }
@@ -188,7 +203,9 @@ class Repository(
         }
     }
 
-    suspend fun pushPending(): SyncResult {
+    private suspend fun doPush(): SyncResult {
+        // Ältere, nur lokal gespeicherte Listen und Positionen jetzt mit farmOS teilen
+        runCatching { publishLocal() }
         var pushed = 0
         var failed = 0
         var lastSeq = -1L
@@ -246,7 +263,7 @@ class Repository(
                 markDone(op)
                 pushed++
             } catch (e: ApiException) {
-                if (e.code == 409 && op.method != "UPLOAD") {
+                if ((e.code == 409 && op.method != "UPLOAD") || (e.code == 404 && op.method == "DELETE")) {
                     // Existiert schon (z. B. früherer Versuch kam doch an).
                     markDone(op); pushed++
                 } else if (e.isPermanent) {
@@ -350,7 +367,8 @@ class Repository(
             "material_type" to "Mittel/Dünger", "unit" to "Einheiten",
         )) {
             val list = fetch(label, "/api/taxonomy_term/$vocab?page[limit]=50").data.map {
-                TermEntity(it.str("id")!!, vocab, it.attributes.str("name") ?: "?")
+                TermEntity(it.str("id")!!, vocab, it.attributes.str("name") ?: "?",
+                    description = it.attributes.textField("description"))
             }
             dao.replaceTerms(vocab, list)
             list.forEach { termNames[it.id] = it.name }
@@ -398,10 +416,22 @@ class Repository(
                 lon = geoCenter(a)?.second,
             )
         }
-        // In der App gesetzte Positionen behalten
-        val pins = dao.locationsNow().filter { it.pinLat != null && it.pinLon != null }.associateBy { it.id }
+        // Positionen (Zufahrt): aus farmOS-Einträgen „Position“; noch nicht übertragene eigene bleiben
+        val serverPins = fetchPins()
+        val openIds = dao.openOps().map { it.entityId }.toSet()
+        val local = dao.locationsNow().associateBy { it.id }
         dao.replaceLocations((lands + structures + plants).map { loc ->
-            pins[loc.id]?.let { p -> loc.copy(pinLat = p.pinLat, pinLon = p.pinLon) } ?: loc
+            val mine = local[loc.id]
+            val keepLocal = mine != null && (
+                (mine.pinLogId != null && openIds.contains(mine.pinLogId)) ||
+                    (mine.pinLat != null && mine.pinLogId == null)
+                )
+            val server = serverPins[loc.id]
+            when {
+                keepLocal && mine != null -> loc.copy(pinLat = mine.pinLat, pinLon = mine.pinLon, pinLogId = mine.pinLogId)
+                server != null -> loc.copy(pinLat = server.first, pinLon = server.second, pinLogId = server.third)
+                else -> loc
+            }
         })
 
         // Maschinen
@@ -468,6 +498,87 @@ class Repository(
             }
         }
         dao.replaceLogs(logs)
+
+        // Geteilte Feldlisten
+        try {
+            pullLists()
+        } catch (e: Exception) {
+            if (FarmApi.isNetworkError(e)) throw e
+            hiddenWarnings += "Feldlisten (${e.message})"
+        }
+    }
+
+    /** Neueste „Position“-Einträge je Fläche: Fläche -> (Breite, Länge, Eintrag-ID). */
+    private suspend fun fetchPins(): Map<String, Triple<Double, Double, String>> {
+        val list = try {
+            api.getAll(
+                "/api/log/observation?filter[pos][condition][path]=category.name" +
+                    "&filter[pos][condition][value]=$POSITION_CATEGORY&sort=-timestamp&page[limit]=50", 10,
+            )
+        } catch (e: ApiException) {
+            return emptyMap()
+        }
+        val out = mutableMapOf<String, Triple<Double, Double, String>>()
+        for (o in list.data) {
+            val c = geoCenter(o.attributes) ?: continue
+            val id = o.str("id") ?: continue
+            for (loc in o.relationIds("location")) if (loc !in out) out[loc] = Triple(c.first, c.second, id)
+        }
+        return out
+    }
+
+    /** Feldlisten aus farmOS: Liste = Kategorie „Liste: …“, Feld = Eintrag mit dieser Kategorie. */
+    private suspend fun pullLists() {
+        if (dao.openOpCount() > 0) return // noch nicht alles übertragen -> lokalen Stand behalten
+        val listTerms = dao.termsNow("log_category").filter { it.name.startsWith(LIST_PREFIX) && !it.pending }
+        val byTerm = listTerms.associateBy { it.id }
+        val locs = dao.locationsNow().associateBy { it.id }
+        val items = mutableMapOf<Pair<String, String>, FieldListItem>()
+        val firstTs = mutableMapOf<String, Long>()
+        for (type in (ListWork.entries.map { it.logType } + LogKind.entries.map { it.apiType }).distinct()) {
+            val page = try {
+                api.getAll(
+                    "/api/log/$type?filter[l][condition][path]=category.name" +
+                        "&filter[l][condition][operator]=STARTS_WITH&filter[l][condition][value]=Liste%3A" +
+                        "&page[limit]=50", 20,
+                )
+            } catch (e: ApiException) {
+                if (e.code == 404) continue else throw e
+            }
+            for (o in page.data) {
+                val logId = o.str("id") ?: continue
+                val listIds = o.relationIds("category").filter { it in byTerm }
+                if (listIds.isEmpty()) continue
+                val a = o.attributes
+                val done = a.str("status") != "pending"
+                val ts = parseTime(a.str("timestamp"))
+                // Feld direkt als Ort, sonst über die Kultur, auf der gearbeitet wurde
+                val viaPlants = o.relationIds("asset").flatMap { id ->
+                    locs[id]?.takeIf { it.kind == "plant" }?.locationIds?.split(",") ?: emptyList()
+                }
+                val fields = (o.relationIds("location") + viaPlants)
+                    .filter { it.isNotBlank() && (locs[it]?.kind == "land" || locs[it]?.kind == "structure") }
+                    .distinct()
+                for (listId in listIds) for (f in fields) {
+                    items[listId to f] = FieldListItem(listId, f, done = done, doneAt = if (done) ts else null,
+                        logged = true, logId = logId)
+                    if (ts != null) firstTs[listId] = minOf(firstTs[listId] ?: ts, ts)
+                }
+            }
+        }
+        val known = dao.fieldListsNow().associateBy { it.id }
+        val lists = listTerms.map { t ->
+            val desc = t.description.orEmpty()
+            val work = Regex("Arbeit: ([A-Z_]+)").find(desc)?.groupValues?.get(1)
+                ?.takeIf { w -> ListWork.entries.any { it.name == w } }
+            val notes = desc.substringAfter("Notiz: ", "").trim().ifBlank { null }
+            FieldListEntity(
+                id = t.id, name = t.name.removePrefix(LIST_PREFIX).trim(), work = work, notes = notes,
+                createdAt = known[t.id]?.createdAt ?: firstTs[t.id]?.let { it * 1000 } ?: System.currentTimeMillis(),
+                remote = true,
+            )
+        }
+        dao.replaceRemoteLists(lists, items.values.toList())
     }
 
     // ================================================================ Verbindung testen
@@ -765,6 +876,8 @@ class Repository(
         val extraRefs: Map<String, List<Pair<String, String>>> = emptyMap(),
         val attachPhotosToAssets: Boolean = false,
         val equipment: List<AssetRef> = emptyList(),
+        /** "done" oder "pending" (geplant/offen) */
+        val status: String = "done",
     )
 
     private suspend fun enqueueLog(spec: LogSpec): String {
@@ -804,7 +917,7 @@ class Repository(
                 putJsonObject("attributes") {
                     put("name", spec.name)
                     put("timestamp", isoTime(spec.timestamp))
-                    put("status", "done")
+                    put("status", spec.status)
                     if (spec.movement) put("is_movement", true)
                     if (!spec.notes.isNullOrBlank()) putJsonObject("notes") {
                         put("value", spec.notes); put("format", "default")
@@ -824,7 +937,7 @@ class Repository(
             listOf(
                 LogEntity(
                     id = id, type = spec.apiType, name = spec.name, timestamp = spec.timestamp,
-                    notes = spec.notes?.ifBlank { null }, status = "done", isMovement = spec.movement,
+                    notes = spec.notes?.ifBlank { null }, status = spec.status, isMovement = spec.movement,
                     assetIds = spec.assets.joinToString(",") { it.id },
                     locationIds = spec.locations.joinToString(",") { it.id },
                     imageUrls = spec.photos.joinToString("\n") { "file://$it" },
@@ -1045,79 +1158,260 @@ class Repository(
         )
     }
 
-    // ---------------------------------------------------------------- Feldlisten
+    // ---------------------------------------------------------------- Feldlisten (geteilt über farmOS)
+
+    private fun workOf(list: FieldListEntity?): ListWork? = ListWork.entries.firstOrNull { it.name == list?.work }
+
+    private fun listDescription(work: ListWork?, notes: String?) = buildString {
+        append("Feldliste aus der App farmOS Hof")
+        if (work != null) append("\nArbeit: ").append(work.name)
+        if (!notes.isNullOrBlank()) append("\nNotiz: ").append(notes.trim())
+    }
+
+    /** Liste als Kategorie „Liste: <Name>“ in farmOS anlegen bzw. ändern. */
+    private suspend fun enqueueListTerm(id: String, name: String, work: ListWork?, notes: String?, create: Boolean,
+                                        prefix: String = LIST_PREFIX) {
+        val full = prefix + name.trim()
+        val desc = listDescription(work, notes)
+        val body = buildJsonObject {
+            putJsonObject("data") {
+                put("type", "taxonomy_term--log_category")
+                put("id", id)
+                putJsonObject("attributes") {
+                    put("name", full)
+                    putJsonObject("description") { put("value", desc); put("format", "default") }
+                }
+            }
+        }
+        dao.upsertTerms(listOf(TermEntity(id, "log_category", full, pending = create, description = desc)))
+        dao.enqueue(
+            PendingOp(
+                method = if (create) "POST" else "PATCH",
+                path = if (create) "/api/taxonomy_term/log_category" else "/api/taxonomy_term/log_category/$id",
+                body = body.toString(), description = "Liste „${name.trim()}“", entityKind = "term", entityId = id,
+            )
+        )
+    }
+
+    /** Ein Eintrag je Feld: offen (geplant) oder erledigt. */
+    private suspend fun enqueueItemLog(
+        listId: String, listName: String, work: ListWork, notes: String?,
+        loc: LocationEntity, done: Boolean, doneAt: Long?,
+    ): String {
+        val catId = work.category?.let { ensureTerm("log_category", it) }
+        val matId = work.material?.let { ensureTerm("material_type", it) }
+        val title = "$listName – ${loc.name}"
+        val areaQty = loc.areaHa?.let {
+            enqueueQuantity(String.format(Locale.US, "%.4f", it), "ha", "Fläche", title, unitTerm = true)
+        }
+        return enqueueLog(
+            LogSpec(
+                apiType = work.logType, typeLabel = work.label, name = title,
+                timestamp = doneAt ?: (System.currentTimeMillis() / 1000),
+                notes = notes,
+                locations = listOf(AssetRef(loc.id, "asset--${loc.kind}", loc.name)),
+                quantityIds = listOfNotNull(areaQty),
+                categoryIds = listOfNotNull(catId, listId),
+                categoryNames = listOfNotNull(work.category),
+                extraRefs = matId?.let { mapOf("material_type" to listOf("taxonomy_term--material_type" to it)) }
+                    ?: emptyMap(),
+                status = if (done) "done" else "pending",
+            )
+        )
+    }
+
+    private suspend fun logType(logId: String, fallback: String): String = dao.logNow(logId)?.type ?: fallback
+
+    private suspend fun enqueueDeleteLog(logId: String, type: String, what: String) {
+        dao.enqueue(
+            PendingOp(
+                method = "DELETE", path = "/api/log/$type/$logId", body = "",
+                description = "Löschen: $what", entityKind = "delete", entityId = logId,
+            )
+        )
+        dao.deleteLogRow(logId)
+    }
+
+    /** Liste von einem vorhandenen Eintrag lösen (Eintrag selbst bleibt). */
+    private suspend fun enqueueRemoveListCategory(logId: String, type: String, listId: String) {
+        val body = buildJsonObject {
+            putJsonArray("data") {
+                add(buildJsonObject { put("type", "taxonomy_term--log_category"); put("id", listId) })
+            }
+        }
+        dao.enqueue(
+            PendingOp(
+                method = "DELETE", path = "/api/log/$type/$logId/relationships/category", body = body.toString(),
+                description = "Feld aus Liste entfernen", entityKind = "rel", entityId = logId,
+            )
+        )
+    }
+
+    /** Ältere, nur auf dem Handy gespeicherte Liste in farmOS anlegen. */
+    private suspend fun publishList(list: FieldListEntity) {
+        val w = workOf(list) ?: ListWork.OTHER
+        enqueueListTerm(list.id, list.name, workOf(list), list.notes, create = true)
+        val locs = dao.locationsNow().associateBy { it.id }
+        for (item in dao.listItemsNow(list.id)) {
+            if (item.logId != null || item.logged) continue // bereits eingetragene nicht doppelt anlegen
+            val loc = locs[item.locationId] ?: continue
+            val logId = enqueueItemLog(list.id, list.name, w, list.notes, loc, item.done, item.doneAt)
+            dao.setItemLogId(list.id, item.locationId, logId)
+        }
+        dao.upsertFieldList(list.copy(remote = true))
+    }
+
+    /** Alte lokale Listen und Positionen (vor Version 1.8) übertragen. */
+    private suspend fun publishLocal() {
+        if (!prefs.isLoggedIn) return
+        for (list in dao.fieldListsNow()) if (!list.remote) publishList(list)
+        for (loc in dao.locationsNow()) {
+            if (loc.kind != "plant" && loc.pinLat != null && loc.pinLon != null && loc.pinLogId == null) {
+                setPosition(loc, loc.pinLat, loc.pinLon, alsoGeometry = false)
+            }
+        }
+    }
 
     suspend fun saveFieldList(id: String?, name: String, work: ListWork?, notes: String?, locationIds: List<String>): String {
+        val before = id?.let { dao.fieldListNow(it) }
+        if (before != null && !before.remote) publishList(before)
         val listId = id ?: UUID.randomUUID().toString()
-        val created = id?.let { dao.fieldListNow(it)?.createdAt } ?: System.currentTimeMillis()
-        dao.saveFieldList(
-            FieldListEntity(listId, name.trim(), work?.name, notes?.trim()?.ifBlank { null }, created),
-            locationIds.distinct(),
+        val cleanName = name.trim()
+        val cleanNotes = notes?.trim()?.ifBlank { null }
+        val w = work ?: ListWork.OTHER
+        if (before == null) {
+            enqueueListTerm(listId, cleanName, work, cleanNotes, create = true)
+        } else if (before.name != cleanName || before.work != work?.name || before.notes != cleanNotes) {
+            enqueueListTerm(listId, cleanName, work, cleanNotes, create = false)
+        }
+        dao.upsertFieldList(
+            FieldListEntity(listId, cleanName, work?.name, cleanNotes, before?.createdAt ?: System.currentTimeMillis(),
+                remote = true)
         )
+        val wanted = locationIds.distinct()
+        val current = dao.listItemsNow(listId).associateBy { it.locationId }
+        // Herausgenommene Felder: offenen Eintrag löschen, erledigten nur von der Liste lösen
+        for ((locId, item) in current) {
+            if (locId in wanted) continue
+            item.logId?.let { logId ->
+                val type = logType(logId, w.logType)
+                if (item.done) enqueueRemoveListCategory(logId, type, listId)
+                else enqueueDeleteLog(logId, type, "$cleanName (offenes Feld)")
+            }
+            dao.deleteListItem(listId, locId)
+        }
+        // Neue Felder: offenen Eintrag anlegen
+        val locs = dao.locationsNow().associateBy { it.id }
+        for (locId in wanted) {
+            if (locId in current) continue
+            val loc = locs[locId] ?: continue
+            val logId = enqueueItemLog(listId, cleanName, w, cleanNotes, loc, done = false, doneAt = null)
+            dao.upsertListItems(listOf(FieldListItem(listId, locId, logId = logId)))
+        }
         return listId
     }
 
-    /** Liste aus vorhandenen Einträgen: alle Felder gelten schon als erledigt und eingetragen. */
-    suspend fun createListFromLogs(name: String, work: ListWork?, doneAt: Map<String, Long>): String {
-        val id = saveFieldList(null, name, work, null, doneAt.keys.toList())
-        dao.upsertListItems(doneAt.map { (loc, ts) -> FieldListItem(id, loc, done = true, doneAt = ts, logged = true) })
+    /** Liste aus vorhandenen Einträgen: die Einträge bekommen zusätzlich die Listen-Kategorie. */
+    suspend fun createListFromLogs(name: String, work: ListWork?, entries: Map<String, Pair<Long, LogEntity>>): String {
+        val id = UUID.randomUUID().toString()
+        enqueueListTerm(id, name, work, null, create = true)
+        dao.upsertFieldList(FieldListEntity(id, name.trim(), work?.name, null, System.currentTimeMillis(), remote = true))
+        for (log in entries.values.map { it.second }.distinctBy { it.id }) {
+            val body = buildJsonObject {
+                putJsonArray("data") {
+                    add(buildJsonObject { put("type", "taxonomy_term--log_category"); put("id", id) })
+                }
+            }
+            dao.enqueue(
+                PendingOp(
+                    method = "POST", path = "/api/log/${log.type}/${log.id}/relationships/category",
+                    body = body.toString(), description = "Eintrag zur Liste „${name.trim()}“",
+                    entityKind = "rel", entityId = log.id,
+                )
+            )
+        }
+        dao.upsertListItems(entries.map { (loc, p) ->
+            FieldListItem(id, loc, done = true, doneAt = p.first, logged = true, logId = p.second.id)
+        })
         return id
     }
 
     suspend fun setListItemDone(listId: String, locationId: String, done: Boolean) {
-        dao.setItemDone(listId, locationId, done, if (done) System.currentTimeMillis() / 1000 else null)
+        val list = dao.fieldListNow(listId) ?: return
+        if (!list.remote) publishList(list)
+        val now = System.currentTimeMillis() / 1000
+        dao.setItemDone(listId, locationId, done, if (done) now else null)
+        val item = dao.listItemsNow(listId).firstOrNull { it.locationId == locationId } ?: return
+        val logId = item.logId ?: return
+        val type = logType(logId, (workOf(list) ?: ListWork.OTHER).logType)
+        val status = if (done) "done" else "pending"
+        val body = buildJsonObject {
+            putJsonObject("data") {
+                put("type", "log--$type")
+                put("id", logId)
+                putJsonObject("attributes") {
+                    put("status", status)
+                    if (done) put("timestamp", isoTime(now))
+                }
+            }
+        }
+        dao.setLogStatus(logId, status)
+        dao.enqueue(
+            PendingOp(
+                method = "PATCH", path = "/api/log/$type/$logId", body = body.toString(),
+                description = (if (done) "Erledigt: " else "Wieder offen: ") + list.name,
+                entityKind = "status", entityId = logId,
+            )
+        )
     }
 
     suspend fun setAllDone(listId: String) {
-        val now = System.currentTimeMillis() / 1000
-        dao.listItemsNow(listId).filter { !it.done }.forEach { dao.setItemDone(listId, it.locationId, true, now) }
+        dao.listItemsNow(listId).filter { !it.done }.forEach { setListItemDone(listId, it.locationId, true) }
     }
 
-    suspend fun deleteFieldList(id: String) = dao.deleteFieldList(id)
-
-    /** Trägt alle erledigten, noch nicht eingetragenen Felder als Logs in farmOS ein. Liefert die Anzahl. */
-    suspend fun logFieldList(list: FieldListEntity): Int {
-        val work = ListWork.entries.firstOrNull { it.name == list.work } ?: ListWork.OTHER
-        val locs = dao.locationsNow().associateBy { it.id }
-        val todo = dao.listItemsNow(list.id).filter { it.done && !it.logged }
-        if (todo.isEmpty()) return 0
-        val catId = work.category?.let { ensureTerm("log_category", it) }
-        val matId = work.material?.let { ensureTerm("material_type", it) }
-        var count = 0
-        for (item in todo) {
-            val loc = locs[item.locationId] ?: continue
-            val title = "${list.name} – ${loc.name}"
-            val areaQty = loc.areaHa?.let {
-                enqueueQuantity(String.format(Locale.US, "%.4f", it), "ha", "Fläche", title, unitTerm = true)
+    /** Liste löschen: offene Einträge werden entfernt, erledigte bleiben als Aufzeichnung erhalten. */
+    suspend fun deleteFieldList(id: String) {
+        val list = dao.fieldListNow(id) ?: return
+        if (list.remote) {
+            val w = workOf(list) ?: ListWork.OTHER
+            for (item in dao.listItemsNow(id)) {
+                val logId = item.logId ?: continue
+                if (!item.done) enqueueDeleteLog(logId, logType(logId, w.logType), "${list.name} (offenes Feld)")
             }
-            enqueueLog(
-                LogSpec(
-                    apiType = work.logType, typeLabel = work.label, name = title,
-                    timestamp = item.doneAt ?: (System.currentTimeMillis() / 1000),
-                    notes = list.notes,
-                    locations = listOf(AssetRef(loc.id, "asset--${loc.kind}", loc.name)),
-                    quantityIds = listOfNotNull(areaQty),
-                    categoryIds = listOfNotNull(catId),
-                    categoryNames = listOfNotNull(work.category),
-                    extraRefs = matId?.let { mapOf("material_type" to listOf("taxonomy_term--material_type" to it)) }
-                        ?: emptyMap(),
-                )
-            )
-            dao.setItemLogged(list.id, item.locationId)
-            count++
+            // Kategorie umbenennen, damit die Liste nicht wieder auftaucht
+            enqueueListTerm(id, list.name, workOf(list), list.notes, create = false, prefix = ARCHIVE_PREFIX)
         }
-        return count
+        dao.deleteFieldList(id)
     }
 
     // ---------------------------------------------------------------- Position einer Fläche
 
     /**
-     * Speichert die Position in der App. Hat die Fläche in farmOS noch keine Geometrie,
-     * wird der Punkt auch dort eingetragen (dann sieht man ihn auf der farmOS-Karte).
+     * Position (z. B. Zufahrt) setzen oder löschen. Gespeichert als farmOS-Eintrag „Zufahrt: <Fläche>“
+     * mit GPS-Punkt und Kategorie „Position“ – so sehen alle Handys dieselbe Position.
+     * Hat die Fläche in farmOS noch keine Geometrie, wird der Punkt auch dort eingetragen.
      */
-    suspend fun setPosition(location: LocationEntity, lat: Double?, lon: Double?) {
-        dao.setPin(location.id, lat, lon)
-        if (lat != null && lon != null && location.lat == null && location.kind != "plant") {
+    suspend fun setPosition(location: LocationEntity, lat: Double?, lon: Double?, alsoGeometry: Boolean = true) {
+        location.pinLogId?.let { old ->
+            enqueueDeleteLog(old, logType(old, "observation"), "alte Position von „${location.name}“")
+        }
+        if (lat == null || lon == null) {
+            dao.setPinFull(location.id, null, null, null)
+            return
+        }
+        val catId = ensureTerm("log_category", POSITION_CATEGORY)
+        val logId = enqueueLog(
+            LogSpec(
+                apiType = "observation", typeLabel = "Position", name = "Zufahrt: ${location.name}",
+                timestamp = System.currentTimeMillis() / 1000,
+                notes = "Position / Zufahrt (gesetzt in der App farmOS Hof)",
+                locations = listOf(AssetRef(location.id, "asset--${location.kind}", location.name)),
+                latitude = lat, longitude = lon,
+                categoryIds = listOf(catId), categoryNames = listOf(POSITION_CATEGORY),
+            )
+        )
+        dao.setPinFull(location.id, lat, lon, logId)
+        if (alsoGeometry && location.lat == null && location.kind != "plant") {
             val body = buildJsonObject {
                 putJsonObject("data") {
                     put("type", "asset--${location.kind}")

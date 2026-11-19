@@ -144,7 +144,7 @@ class FarmApi(private val prefs: Prefs) {
                     .url(url)
                     .header("Authorization", "Bearer $token")
                     .header("Accept", "application/vnd.api+json")
-                val rb = body?.toRequestBody(jsonApiType)
+                val rb = body?.takeIf { it.isNotEmpty() }?.toRequestBody(jsonApiType)
                 when (method) {
                     "UPLOAD" -> {
                         val f = file ?: throw IllegalArgumentException("Datei fehlt")
@@ -154,7 +154,7 @@ class FarmApi(private val prefs: Prefs) {
                     "GET" -> builder.get()
                     "POST" -> builder.post(rb ?: "".toRequestBody(jsonApiType))
                     "PATCH" -> builder.patch(rb ?: "".toRequestBody(jsonApiType))
-                    "DELETE" -> builder.delete()
+                    "DELETE" -> if (rb != null) builder.delete(rb) else builder.delete()
                     else -> throw IllegalArgumentException(method)
                 }
                 client.newCall(builder.build()).execute().use { resp ->

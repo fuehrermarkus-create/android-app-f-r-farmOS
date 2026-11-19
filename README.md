@@ -178,3 +178,14 @@ Pflanzenschutz, Düngung, Ernte) können die eingesetzten Maschinen angegeben we
 `server/fotos-einrichten.sh` legt in farmOS die Seite **/fotos** an: alle Fotos aus Einträgen als Galerie
 (neueste zuerst, mit Datum, Eintrag, Tier/Fläche, Suchfeld). Klick auf ein Foto öffnet es groß,
 Klick auf den Namen den Eintrag.
+
+## Abgleich und mehrere Handys (ab 1.8)
+
+- **Automatisch:** Beim Öffnen der App (wenn der letzte Abgleich > 3 Minuten her ist), direkt nach jedem
+  Speichern (Hochladen) und etwa stündlich im Hintergrund (hoch- und herunterladen).
+- **Feldlisten** liegen jetzt in farmOS: Liste = Kategorie „Liste: <Name>“, jedes Feld = ein Eintrag
+  (offen = geplant, abgehakt = erledigt). Alle Handys sehen dieselben Listen. Gelöschte Listen werden zu
+  „Archiv: <Name>“, erledigte Einträge bleiben erhalten.
+- **Positionen (Zufahrt)** werden als Eintrag „Zufahrt: <Fläche>“ mit GPS-Punkt (Kategorie „Position“)
+  gespeichert und sind damit auf allen Handys und auf der farmOS-Karte sichtbar.
+- Ältere, nur am Handy gespeicherte Listen und Positionen werden beim ersten Abgleich automatisch übertragen.

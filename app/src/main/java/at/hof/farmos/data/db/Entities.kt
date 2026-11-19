@@ -49,6 +49,8 @@ data class LocationEntity(
     /** In der App gesetzte Position (z. B. Zufahrt) – bleibt beim Abgleich erhalten */
     val pinLat: Double? = null,
     val pinLon: Double? = null,
+    /** farmOS-Eintrag (Kategorie „Position“), in dem die gesetzte Position gespeichert ist */
+    val pinLogId: String? = null,
 ) {
     fun flagList(): List<String> = flags.split(",").filter { it.isNotBlank() }
 
@@ -65,6 +67,7 @@ data class AnimalTypeEntity(
     @PrimaryKey val id: String,
     val name: String,
     val pending: Boolean = false,
+    val description: String? = null,
 )
 
 /**
@@ -128,6 +131,8 @@ data class FieldListEntity(
     val notes: String?,
     val createdAt: Long,
     val archived: Boolean = false,
+    /** in farmOS gespeichert (Liste = Kategorie „Liste: …“, Felder = Einträge) */
+    val remote: Boolean = false,
 )
 
 @Entity(tableName = "field_list_items", primaryKeys = ["listId", "locationId"])
@@ -139,6 +144,8 @@ data class FieldListItem(
     val doneAt: Long? = null,
     /** schon als Log in farmOS eingetragen */
     val logged: Boolean = false,
+    /** farmOS-Eintrag zu diesem Feld (offen = geplant, erledigt = done) */
+    val logId: String? = null,
 )
 
 /** Maschinen / Geräte (farmOS „Equipment“). */

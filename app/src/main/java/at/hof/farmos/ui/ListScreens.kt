@@ -265,7 +265,6 @@ fun ListDetailScreen(
     val items by remember(listId) { vm.listItems(listId) }.collectAsState(initial = emptyList())
     val locations by vm.locations.collectAsState()
     var confirmDelete by remember { mutableStateOf(false) }
-    var confirmLog by remember { mutableStateOf(false) }
     val l = list
 
     val byId = locations.associateBy { it.id }
@@ -275,7 +274,6 @@ fun ListDetailScreen(
     val doneCount = items.count { it.done }
     val totalHa = rows.sumOf { it.second?.areaHa ?: 0.0 }
     val openHa = rows.filter { !it.first.done }.sumOf { it.second?.areaHa ?: 0.0 }
-    val toLog = items.count { it.done && !it.logged }
 
     ScreenScaffold(
         title = l?.name ?: "Liste",
@@ -296,6 +294,11 @@ fun ListDetailScreen(
                         InfoRow("Felder", "$doneCount von ${items.size} erledigt")
                         if (totalHa > 0) InfoRow("Fläche", "${ha(totalHa)} gesamt, ${ha(openHa)} offen")
                         InfoRow("Notiz", l.notes)
+                        Text(
+                            "Wird mit farmOS geteilt: Alle Handys sehen die Liste und das Abhaken. " +
+                                "Jedes Feld ist in farmOS ein Eintrag – offen oder erledigt.",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
+                        )
                         if (items.isNotEmpty()) {
                             LinearProgressIndicator(
                                 progress = { doneCount.toFloat() / items.size },
@@ -321,9 +324,7 @@ fun ListDetailScreen(
                             TextButton(onClick = { vm.setAllDone(l.id) }, enabled = doneCount < items.size) {
                                 Text("Alle abhaken")
                             }
-                            if (toLog > 0) {
-                                TextButton(onClick = { confirmLog = true }) { Text("In farmOS eintragen ($toLog)") }
-                            }
+
                         }
                     }
                 }
@@ -340,7 +341,6 @@ fun ListDetailScreen(
                                 loc?.areaInfo,
                                 loc?.let { cropsOn(it, locations).mapNotNull { c -> c.subtype }.distinct().joinToString(", ").ifBlank { null } },
                                 item.doneAt?.takeIf { item.done }?.let { "erledigt " + formatDate(it) },
-                                if (item.logged) "in farmOS" else null,
                             ).joinToString(" · ")
                         )
                     },
@@ -365,27 +365,11 @@ fun ListDetailScreen(
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Liste löschen?") },
-            text = { Text("„${l.name}“ wird gelöscht. Bereits in farmOS eingetragene Einträge bleiben erhalten.") },
+            text = { Text("„${l.name}“ wird für alle Handys gelöscht. Offene Felder werden aus farmOS entfernt, erledigte bleiben als Aufzeichnung erhalten.") },
             confirmButton = {
                 TextButton(onClick = { confirmDelete = false; vm.deleteFieldList(l.id); onBack() }) { Text("Löschen") }
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Abbrechen") } },
-        )
-    }
-    if (confirmLog && l != null) {
-        val w = listWork(l.work)
-        AlertDialog(
-            onDismissRequest = { confirmLog = false },
-            title = { Text("In farmOS eintragen?") },
-            text = {
-                Text(
-                    "Für $toLog erledigte(s) Feld(er) wird je ein Eintrag „${l.name} – Feldname“ angelegt" +
-                        (w?.category?.let { " (Kategorie „$it“" + (w?.material?.let { m -> ", Mittel „$m“" } ?: "") + ")" } ?: "") +
-                        ", mit dem Erledigt-Datum und der Feldgröße."
-                )
-            },
-            confirmButton = { TextButton(onClick = { confirmLog = false; vm.logFieldList(l) }) { Text("Eintragen") } },
-            dismissButton = { TextButton(onClick = { confirmLog = false }) { Text("Abbrechen") } },
         )
     }
 }
@@ -439,12 +423,16 @@ fun ListFromLogsScreen(vm: MainViewModel, onDone: (String?) -> Unit) {
 
     // Feld -> letztes Datum, an dem dort etwas passend Erfasstes passiert ist
     val doneAt = mutableMapOf<String, Long>()
+    val sourceLog = mutableMapOf<String, at.hof.farmos.data.db.LogEntity>()
     logs.filter { label != null && logLabel(it) == label && it.timestamp in startTs until endTs }.forEach { log ->
         val direct = log.locationIds.split(",").filter { it.isNotBlank() }
         val viaPlants = log.assetIds.split(",").mapNotNull { byId[it] }.filter { it.kind == "plant" }
             .flatMap { it.locationIds.split(",") }.filter { it.isNotBlank() }
         (direct + viaPlants).filter { byId[it]?.kind == "land" || byId[it]?.kind == "structure" }.forEach { id ->
-            doneAt[id] = maxOf(doneAt[id] ?: 0L, log.timestamp)
+            if (log.timestamp >= (doneAt[id] ?: 0L)) {
+                doneAt[id] = log.timestamp
+                sourceLog[id] = log
+            }
         }
     }
     LaunchedEffect(label, fromDay, toDay) {
@@ -491,7 +479,10 @@ fun ListFromLogsScreen(vm: MainViewModel, onDone: (String?) -> Unit) {
             }
             item {
                 Button(
-                    onClick = { vm.createListFromLogs(name, listWork(work), doneAt.toMap()) { id -> onDone(id) } },
+                    onClick = { vm.createListFromLogs(
+                            name, listWork(work),
+                            doneAt.mapNotNull { (loc, ts) -> sourceLog[loc]?.let { loc to (ts to it) } }.toMap(),
+                        ) { id -> onDone(id) } },
                     enabled = name.isNotBlank() && doneAt.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth().padding(16.dp).height(52.dp),
                 ) { Text("Liste erstellen (${doneAt.size} Felder)") }

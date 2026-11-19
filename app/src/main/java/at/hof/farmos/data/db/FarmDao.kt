@@ -253,6 +253,42 @@ abstract class FarmDao {
     @Query("DELETE FROM field_lists WHERE id = :id")
     abstract suspend fun deleteFieldListRow(id: String)
 
+    @Query("SELECT * FROM field_lists")
+    abstract suspend fun fieldListsNow(): List<FieldListEntity>
+
+    @Query("DELETE FROM field_list_items WHERE listId = :listId AND locationId = :locationId")
+    abstract suspend fun deleteListItem(listId: String, locationId: String)
+
+    @Query("UPDATE field_list_items SET logId = :logId WHERE listId = :listId AND locationId = :locationId")
+    abstract suspend fun setItemLogId(listId: String, locationId: String, logId: String)
+
+    @Query("DELETE FROM field_list_items WHERE listId IN (SELECT id FROM field_lists WHERE remote = 1)")
+    abstract suspend fun deleteRemoteListItems()
+
+    @Query("DELETE FROM field_lists WHERE remote = 1")
+    abstract suspend fun deleteRemoteLists()
+
+    /** Geteilte Listen durch den Stand aus farmOS ersetzen (lokale, noch nicht geteilte bleiben). */
+    @Transaction
+    open suspend fun replaceRemoteLists(lists: List<FieldListEntity>, items: List<FieldListItem>) {
+        deleteRemoteListItems()
+        deleteRemoteLists()
+        lists.forEach { upsertFieldList(it) }
+        upsertListItems(items)
+    }
+
+    @Query("SELECT * FROM logs WHERE id = :id")
+    abstract suspend fun logNow(id: String): LogEntity?
+
+    @Query("DELETE FROM logs WHERE id = :id")
+    abstract suspend fun deleteLogRow(id: String)
+
+    @Query("UPDATE logs SET status = :status WHERE id = :id")
+    abstract suspend fun setLogStatus(id: String, status: String)
+
+    @Query("UPDATE locations SET pinLat = :lat, pinLon = :lon, pinLogId = :logId WHERE id = :id")
+    abstract suspend fun setPinFull(id: String, lat: Double?, lon: Double?, logId: String?)
+
     /** Liste speichern; Felder, die drin bleiben, behalten ihren Erledigt-Status. */
     @Transaction
     open suspend fun saveFieldList(list: FieldListEntity, locationIds: List<String>) {

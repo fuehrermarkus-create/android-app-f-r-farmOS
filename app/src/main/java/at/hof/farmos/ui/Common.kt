@@ -107,7 +107,8 @@ fun LogRow(log: LogEntity) {
         supportingContent = {
             Column {
                 Text(
-                    "${logLabel(log)} · ${formatDateTime(log.timestamp)}" +
+                    (if (log.status == "pending") "⏳ offen · " else "") +
+                        "${logLabel(log)} · ${formatDateTime(log.timestamp)}" +
                         if (log.hasGeo) " · 📍" else ""
                 )
                 if (!log.notes.isNullOrBlank()) Text(log.notes, maxLines = 2)

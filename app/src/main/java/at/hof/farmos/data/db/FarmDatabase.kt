@@ -7,6 +7,16 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+/** 1.7 -> 1.8: Listen und Positionen über farmOS teilen. */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE `locations` ADD COLUMN `pinLogId` TEXT")
+        db.execSQL("ALTER TABLE `terms` ADD COLUMN `description` TEXT")
+        db.execSQL("ALTER TABLE `field_lists` ADD COLUMN `remote` INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE `field_list_items` ADD COLUMN `logId` TEXT")
+    }
+}
+
 /** 1.6 -> 1.7: Maschinen. */
 val MIGRATION_5_6 = object : Migration(5, 6) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -71,7 +81,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         EquipmentEntity::class,
         PendingOp::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = false,
 )
 abstract class FarmDatabase : RoomDatabase() {
@@ -80,7 +90,7 @@ abstract class FarmDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): FarmDatabase =
             Room.databaseBuilder(context, FarmDatabase::class.java, "farmos_hof.db")
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigration()
                 .build()
     }

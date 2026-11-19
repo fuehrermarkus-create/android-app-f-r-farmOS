@@ -3,6 +3,7 @@ package at.hof.farmos
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.viewModels
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -70,6 +71,14 @@ import at.hof.farmos.ui.QuickLogScreen
 import at.hof.farmos.ui.SettingsScreen
 
 class MainActivity : ComponentActivity() {
+    private val mainVm: MainViewModel by viewModels()
+
+    override fun onStart() {
+        super.onStart()
+        // Beim Öffnen/Zurückkehren neue Daten holen, wenn der letzte Abgleich ein paar Minuten her ist
+        mainVm.syncIfStale()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()

@@ -20,7 +20,9 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     override suspend fun doWork(): Result {
         val app = applicationContext as FarmApp
         if (!app.prefs.isLoggedIn) return Result.success()
-        val result = app.repository.pushPending()
+        // Regelmäßig: hoch- UND herunterladen; direkt nach dem Speichern: nur hochladen
+        val full = inputData.getBoolean("full", false)
+        val result = if (full) app.repository.sync() else app.repository.pushPending()
         return when {
             result.offline -> Result.retry()
             result.error != null && result.failed == 0 -> Result.retry()
@@ -45,9 +47,11 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         fun schedulePeriodic(context: Context) {
             val req = PeriodicWorkRequestBuilder<SyncWorker>(1, TimeUnit.HOURS)
                 .setConstraints(network)
+                .setInputData(androidx.work.workDataOf("full" to true))
                 .build()
-            WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork("push-periodic", ExistingPeriodicWorkPolicy.KEEP, req)
+            val wm = WorkManager.getInstance(context)
+            wm.cancelUniqueWork("push-periodic") // alter, nur hochladender Auftrag
+            wm.enqueueUniquePeriodicWork("sync-periodic", ExistingPeriodicWorkPolicy.KEEP, req)
         }
     }
 }
