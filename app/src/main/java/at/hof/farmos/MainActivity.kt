@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Pets
@@ -41,6 +42,10 @@ import androidx.navigation.navArgument
 import at.hof.farmos.data.FieldWork
 import at.hof.farmos.data.LogKind
 import at.hof.farmos.ui.FieldWorkScreen
+import at.hof.farmos.ui.ListDetailScreen
+import at.hof.farmos.ui.ListEditScreen
+import at.hof.farmos.ui.ListFromLogsScreen
+import at.hof.farmos.ui.ListsScreen
 import at.hof.farmos.ui.NewEntryScreen
 import at.hof.farmos.ui.AnimalDetailScreen
 import at.hof.farmos.ui.CrashScreen
@@ -80,6 +85,7 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 private val tabs = listOf(
     Tab("animals", "Tiere", Icons.Default.Pets),
     Tab("locations", "Flächen", Icons.Default.Landscape),
+    Tab("lists", "Listen", Icons.Default.Checklist),
     Tab("logs", "Einträge", Icons.Default.Description),
     Tab("settings", "Sync", Icons.Default.Sync),
 )
@@ -168,6 +174,39 @@ private fun AppRoot(vm: MainViewModel) {
                     onNew = { nav.navigate("new") },
                     onPhoto = { nav.navigate(quickLogRoute(camera = true)) },
                 )
+            }
+            composable("lists") {
+                ListsScreen(
+                    vm,
+                    onOpen = { nav.navigate("list/$it") },
+                    onNew = { nav.navigate("list_edit/new") },
+                    onFromLogs = { nav.navigate("list_from_logs") },
+                )
+            }
+            composable("list/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                val id = e.arguments?.getString("id").orEmpty()
+                ListDetailScreen(
+                    vm, id,
+                    onBack = { nav.popBackStack() },
+                    onEdit = { nav.navigate("list_edit/$id") },
+                    onOpenField = { nav.navigate("location/$it") },
+                )
+            }
+            composable("list_edit/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                val id = e.arguments?.getString("id")?.takeIf { it != "new" }
+                ListEditScreen(vm, id, onDone = { saved ->
+                    if (saved != null && id == null) {
+                        // neue Liste: gleich die Liste öffnen
+                        nav.navigate("list/$saved") { popUpTo("lists") }
+                    } else {
+                        nav.popBackStack()
+                    }
+                })
+            }
+            composable("list_from_logs") {
+                ListFromLogsScreen(vm, onDone = { saved ->
+                    if (saved != null) nav.navigate("list/$saved") { popUpTo("lists") } else nav.popBackStack()
+                })
             }
             composable("new") {
                 // Nach der Auswahl ersetzt das Formular diese Seite (Zurück führt zur Liste).

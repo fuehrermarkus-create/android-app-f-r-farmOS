@@ -147,3 +147,11 @@ Woher kommt die Position?
 - Sonst setzt du sie selbst: **„Aktuellen Standort übernehmen“** (z. B. an der Zufahrt stehend) oder
   **„Koordinaten eingeben“** (in Google Maps lange drücken, Koordinaten kopieren, einfügen).
   Hat die Fläche in farmOS noch keine Geometrie, wird der Punkt dort auch eingetragen.
+
+## Feldlisten (ab 1.5)
+
+Tab **Listen**: Listen wie „Silo 1. Schnitt“ oder „Gülle KW 47“ anlegen, Arbeit wählen, Felder auswählen
+(Filter Acker/Grünland/Blühflächen), abhaken, per WhatsApp verschicken (alle oder nur offene, mit Kartenlinks).
+„In farmOS eintragen“ legt für jedes erledigte Feld einen Eintrag mit Datum, Kategorie und Feldgröße an.
+Oben rechts (Uhr-Symbol): Liste aus bereits erfassten Einträgen eines Zeitraums erstellen.
+Die Listen selbst werden auf dem Handy gespeichert.

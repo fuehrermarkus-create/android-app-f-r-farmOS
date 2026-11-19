@@ -115,3 +115,26 @@ data class PendingOp(
     /** Dauerhaft fehlgeschlagen (z. B. Validierungsfehler) – wird nicht automatisch wiederholt. */
     val failed: Boolean = false,
 )
+
+/** Feldliste, z. B. „Silo 1. Schnitt“ oder „Gülle KW 47“ (wird nur in der App gespeichert). */
+@Entity(tableName = "field_lists")
+data class FieldListEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    /** Name eines ListWork-Werts oder null */
+    val work: String?,
+    val notes: String?,
+    val createdAt: Long,
+    val archived: Boolean = false,
+)
+
+@Entity(tableName = "field_list_items", primaryKeys = ["listId", "locationId"])
+data class FieldListItem(
+    val listId: String,
+    val locationId: String,
+    val done: Boolean = false,
+    /** Sekunden (Unix) */
+    val doneAt: Long? = null,
+    /** schon als Log in farmOS eingetragen */
+    val logged: Boolean = false,
+)

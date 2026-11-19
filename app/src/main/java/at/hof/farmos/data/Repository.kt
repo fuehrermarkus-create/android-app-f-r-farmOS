@@ -4,6 +4,8 @@ import at.hof.farmos.data.db.AnimalEntity
 import at.hof.farmos.data.db.AnimalTypeEntity
 import at.hof.farmos.data.db.TermEntity
 import at.hof.farmos.data.db.FarmDao
+import at.hof.farmos.data.db.FieldListEntity
+import at.hof.farmos.data.db.FieldListItem
 import at.hof.farmos.data.db.LocationEntity
 import at.hof.farmos.data.db.LogEntity
 import at.hof.farmos.data.db.PendingOp
@@ -95,6 +97,18 @@ data class FieldWorkDraft(
     val photos: List<String> = emptyList(),
 )
 
+/** Was auf den Feldern einer Liste gemacht wird – bestimmt, wie es in farmOS eingetragen wird. */
+enum class ListWork(val label: String, val logType: String, val category: String?, val material: String? = null) {
+    SILAGE("Silo / Schnitt", "harvest", "Silo"),
+    HAY("Heu", "harvest", "Heu"),
+    MANURE("Gülle", "input", "Düngung", "Gülle"),
+    FERTILIZING("Düngung", "input", "Düngung"),
+    SPRAYING("Pflanzenschutz", "input", "Pflanzenschutz"),
+    HARVEST("Ernte", "harvest", "Ernte"),
+    CARE("Pflege / Mulchen", "activity", "Pflege"),
+    OTHER("Sonstiges", "activity", null),
+}
+
 /** Einheiten mit passender farmOS-Messgröße. */
 val UNIT_MEASURE = linkedMapOf(
     "kg/ha" to "rate", "l/ha" to "rate", "m³/ha" to "rate", "t/ha" to "rate", "dt/ha" to "rate",
@@ -120,6 +134,10 @@ class Repository(
     val plantTypes = dao.terms("plant_type")
     val materials = dao.terms("material_type")
     val flags = dao.terms("flag")
+    val fieldLists = dao.fieldLists()
+    val allListItems = dao.allListItems()
+    fun fieldList(id: String) = dao.fieldList(id)
+    fun listItems(listId: String) = dao.listItems(listId)
     val recentLogs = dao.recentLogs()
     val pendingOps = dao.pendingOps()
     fun animal(id: String) = dao.animal(id)
@@ -887,6 +905,70 @@ class Repository(
                 extraRefs = extra,
             )
         )
+    }
+
+    // ---------------------------------------------------------------- Feldlisten
+
+    suspend fun saveFieldList(id: String?, name: String, work: ListWork?, notes: String?, locationIds: List<String>): String {
+        val listId = id ?: UUID.randomUUID().toString()
+        val created = id?.let { dao.fieldListNow(it)?.createdAt } ?: System.currentTimeMillis()
+        dao.saveFieldList(
+            FieldListEntity(listId, name.trim(), work?.name, notes?.trim()?.ifBlank { null }, created),
+            locationIds.distinct(),
+        )
+        return listId
+    }
+
+    /** Liste aus vorhandenen Einträgen: alle Felder gelten schon als erledigt und eingetragen. */
+    suspend fun createListFromLogs(name: String, work: ListWork?, doneAt: Map<String, Long>): String {
+        val id = saveFieldList(null, name, work, null, doneAt.keys.toList())
+        dao.upsertListItems(doneAt.map { (loc, ts) -> FieldListItem(id, loc, done = true, doneAt = ts, logged = true) })
+        return id
+    }
+
+    suspend fun setListItemDone(listId: String, locationId: String, done: Boolean) {
+        dao.setItemDone(listId, locationId, done, if (done) System.currentTimeMillis() / 1000 else null)
+    }
+
+    suspend fun setAllDone(listId: String) {
+        val now = System.currentTimeMillis() / 1000
+        dao.listItemsNow(listId).filter { !it.done }.forEach { dao.setItemDone(listId, it.locationId, true, now) }
+    }
+
+    suspend fun deleteFieldList(id: String) = dao.deleteFieldList(id)
+
+    /** Trägt alle erledigten, noch nicht eingetragenen Felder als Logs in farmOS ein. Liefert die Anzahl. */
+    suspend fun logFieldList(list: FieldListEntity): Int {
+        val work = ListWork.entries.firstOrNull { it.name == list.work } ?: ListWork.OTHER
+        val locs = dao.locationsNow().associateBy { it.id }
+        val todo = dao.listItemsNow(list.id).filter { it.done && !it.logged }
+        if (todo.isEmpty()) return 0
+        val catId = work.category?.let { ensureTerm("log_category", it) }
+        val matId = work.material?.let { ensureTerm("material_type", it) }
+        var count = 0
+        for (item in todo) {
+            val loc = locs[item.locationId] ?: continue
+            val title = "${list.name} – ${loc.name}"
+            val areaQty = loc.areaHa?.let {
+                enqueueQuantity(String.format(Locale.US, "%.4f", it), "ha", "Fläche", title, unitTerm = true)
+            }
+            enqueueLog(
+                LogSpec(
+                    apiType = work.logType, typeLabel = work.label, name = title,
+                    timestamp = item.doneAt ?: (System.currentTimeMillis() / 1000),
+                    notes = list.notes,
+                    locations = listOf(AssetRef(loc.id, "asset--${loc.kind}", loc.name)),
+                    quantityIds = listOfNotNull(areaQty),
+                    categoryIds = listOfNotNull(catId),
+                    categoryNames = listOfNotNull(work.category),
+                    extraRefs = matId?.let { mapOf("material_type" to listOf("taxonomy_term--material_type" to it)) }
+                        ?: emptyMap(),
+                )
+            )
+            dao.setItemLogged(list.id, item.locationId)
+            count++
+        }
+        return count
     }
 
     // ---------------------------------------------------------------- Position einer Fläche

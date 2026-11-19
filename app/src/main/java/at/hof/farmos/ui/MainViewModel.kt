@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import at.hof.farmos.FarmApp
 import at.hof.farmos.data.BLUEH_FLAG
 import at.hof.farmos.data.FieldWorkDraft
+import at.hof.farmos.data.ListWork
 import at.hof.farmos.data.LogDraft
+import at.hof.farmos.data.db.FieldListEntity
 import at.hof.farmos.data.db.LocationEntity
 import at.hof.farmos.photo.PhotoStore
 import kotlinx.coroutines.Dispatchers
@@ -52,6 +54,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val plantTypes = share(repo.plantTypes)
     val materials = share(repo.materials)
     val flags = share(repo.flags)
+    val fieldLists = share(repo.fieldLists)
+    val allListItems = share(repo.allListItems)
+    fun fieldList(id: String) = repo.fieldList(id)
+    fun listItems(listId: String) = repo.listItems(listId)
     val recentLogs = share(repo.recentLogs)
     val pendingOps = share(repo.pendingOps)
 
@@ -227,6 +233,43 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             repo.createFieldWork(draft)
             afterLocalChange("${draft.work.label} gespeichert")
+        }
+    }
+
+    // ---------------------------------------------------------------- Feldlisten
+
+    fun saveFieldList(id: String?, name: String, work: ListWork?, notes: String?, locationIds: List<String>, then: (String) -> Unit) {
+        safeLaunch("Liste speichern") {
+            val listId = repo.saveFieldList(id, name, work, notes, locationIds)
+            _message.value = "Liste „${name.trim()}“ gespeichert"
+            then(listId)
+        }
+    }
+
+    fun createListFromLogs(name: String, work: ListWork?, doneAt: Map<String, Long>, then: (String) -> Unit) {
+        safeLaunch("Liste erstellen") {
+            val id = repo.createListFromLogs(name, work, doneAt)
+            _message.value = "Liste mit ${doneAt.size} Feldern erstellt"
+            then(id)
+        }
+    }
+
+    fun setListItemDone(listId: String, locationId: String, done: Boolean) {
+        safeLaunch("Abhaken") { repo.setListItemDone(listId, locationId, done) }
+    }
+
+    fun setAllDone(listId: String) {
+        safeLaunch("Alle abhaken") { repo.setAllDone(listId) }
+    }
+
+    fun deleteFieldList(id: String) {
+        safeLaunch("Liste löschen") { repo.deleteFieldList(id) }
+    }
+
+    fun logFieldList(list: FieldListEntity) {
+        safeLaunch("In farmOS eintragen") {
+            val n = repo.logFieldList(list)
+            afterLocalChange(if (n > 0) "$n Feld(er) in farmOS eingetragen" else "Nichts einzutragen")
         }
     }
 

@@ -181,6 +181,63 @@ abstract class FarmDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun upsertLocation(item: LocationEntity)
 
+    // ---------------------------------------------------------------- Feldlisten
+    @Query("SELECT * FROM field_lists ORDER BY archived, createdAt DESC")
+    abstract fun fieldLists(): Flow<List<FieldListEntity>>
+
+    @Query("SELECT * FROM field_lists WHERE id = :id")
+    abstract fun fieldList(id: String): Flow<FieldListEntity?>
+
+    @Query("SELECT * FROM field_lists WHERE id = :id")
+    abstract suspend fun fieldListNow(id: String): FieldListEntity?
+
+    @Query("SELECT * FROM field_list_items")
+    abstract fun allListItems(): Flow<List<FieldListItem>>
+
+    @Query("SELECT * FROM field_list_items WHERE listId = :listId")
+    abstract fun listItems(listId: String): Flow<List<FieldListItem>>
+
+    @Query("SELECT * FROM field_list_items WHERE listId = :listId")
+    abstract suspend fun listItemsNow(listId: String): List<FieldListItem>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun upsertFieldList(list: FieldListEntity)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    abstract suspend fun insertListItemsIgnore(items: List<FieldListItem>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun upsertListItems(items: List<FieldListItem>)
+
+    @Query("DELETE FROM field_list_items WHERE listId = :listId AND locationId NOT IN (:keep)")
+    abstract suspend fun deleteListItemsNotIn(listId: String, keep: List<String>)
+
+    @Query("DELETE FROM field_list_items WHERE listId = :listId")
+    abstract suspend fun deleteAllListItems(listId: String)
+
+    @Query("UPDATE field_list_items SET done = :done, doneAt = :doneAt WHERE listId = :listId AND locationId = :locationId")
+    abstract suspend fun setItemDone(listId: String, locationId: String, done: Boolean, doneAt: Long?)
+
+    @Query("UPDATE field_list_items SET logged = 1 WHERE listId = :listId AND locationId = :locationId")
+    abstract suspend fun setItemLogged(listId: String, locationId: String)
+
+    @Query("DELETE FROM field_lists WHERE id = :id")
+    abstract suspend fun deleteFieldListRow(id: String)
+
+    /** Liste speichern; Felder, die drin bleiben, behalten ihren Erledigt-Status. */
+    @Transaction
+    open suspend fun saveFieldList(list: FieldListEntity, locationIds: List<String>) {
+        upsertFieldList(list)
+        if (locationIds.isEmpty()) deleteAllListItems(list.id) else deleteListItemsNotIn(list.id, locationIds)
+        insertListItemsIgnore(locationIds.map { FieldListItem(list.id, it) })
+    }
+
+    @Transaction
+    open suspend fun deleteFieldList(id: String) {
+        deleteAllListItems(id)
+        deleteFieldListRow(id)
+    }
+
     // ---------------------------------------------------------------- Abmelden
     @Query("DELETE FROM animals")
     abstract suspend fun wipeAnimals()
