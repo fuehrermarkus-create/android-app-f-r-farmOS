@@ -2,6 +2,7 @@ package at.hof.farmos
 
 import android.app.Application
 import at.hof.farmos.data.FarmApi
+import at.hof.farmos.data.Nextcloud
 import at.hof.farmos.data.Prefs
 import at.hof.farmos.data.Repository
 import at.hof.farmos.data.db.FarmDatabase
@@ -24,7 +25,7 @@ class FarmApp : Application(), ImageLoaderFactory {
         prefs = Prefs(this)
         api = FarmApi(prefs)
         val db = FarmDatabase.create(this)
-        repository = Repository(api, db.dao(), prefs, PhotoStore.dir(this))
+        repository = Repository(api, db.dao(), prefs, PhotoStore.dir(this), Nextcloud(prefs))
         runCatching { SyncWorker.schedulePeriodic(this) }
     }
 

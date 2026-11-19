@@ -155,3 +155,13 @@ Tab **Listen**: Listen wie „Silo 1. Schnitt“ oder „Gülle KW 47“ anlegen
 „In farmOS eintragen“ legt für jedes erledigte Feld einen Eintrag mit Datum, Kategorie und Feldgröße an.
 Oben rechts (Uhr-Symbol): Liste aus bereits erfassten Einträgen eines Zeitraums erstellen.
 Die Listen selbst werden auf dem Handy gespeichert.
+
+## Fotos am PC über Nextcloud (ab 1.6)
+
+App › Sync › „Fotos in Nextcloud“ › Einrichten: Adresse, Benutzer, App-Passwort (Nextcloud › Einstellungen ›
+Sicherheit), Ordner. Neue Fotos landen zusätzlich in `<Ordner>/<Feld oder Tier>/<Datum Titel>.jpg`.
+
+## farmOS anpassen (Skript)
+
+`server/farmos-anpassen.sh` entfernt ungenutzte Bereiche (nur ohne Einträge), stellt auf Deutsch um,
+vergibt einfache Bezeichnungen und legt die Markierung „Blühfläche“ an. Vorher Snapshot machen.

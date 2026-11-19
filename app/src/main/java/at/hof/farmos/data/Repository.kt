@@ -126,6 +126,7 @@ class Repository(
     private val dao: FarmDao,
     private val prefs: Prefs,
     private val photoDir: File,
+    val nextcloud: Nextcloud,
 ) {
     val animals = dao.animals()
     val locations = dao.locations()
@@ -177,6 +178,30 @@ class Repository(
             if (op.method != "UPLOAD" && op.body.contains(PLACEHOLDER_PREFIX)) {
                 dao.updateOp(op.copy(failed = true, lastError = "Zugehöriges Foto konnte nicht hochgeladen werden"))
                 failed++
+                continue
+            }
+            if (op.method == "WEBDAV") {
+                // Nextcloud-Fehler blockieren den farmOS-Abgleich nicht
+                val file = File(op.body)
+                when {
+                    !nextcloud.configured -> {
+                        dao.updateOp(op.copy(failed = true, lastError = "Nextcloud nicht eingerichtet"))
+                        failed++
+                    }
+                    !file.exists() -> {
+                        dao.updateOp(op.copy(failed = true, lastError = "Fotodatei nicht mehr vorhanden"))
+                        failed++
+                    }
+                    else -> try {
+                        nextcloud.upload(op.path, file)
+                        markDone(op); pushed++
+                    } catch (e: ApiException) {
+                        dao.updateOp(op.copy(attempts = op.attempts + 1, lastError = e.message, failed = true))
+                        failed++
+                    } catch (e: Exception) {
+                        dao.updateOp(op.copy(attempts = op.attempts + 1, lastError = describe(e)))
+                    }
+                }
                 continue
             }
             try {
@@ -517,7 +542,7 @@ class Repository(
     private suspend fun cleanupPhotos() {
         val files = photoDir.listFiles() ?: return
         val referenced = mutableSetOf<String>()
-        dao.allOpsNow().filter { it.method == "UPLOAD" }.forEach { referenced += it.body }
+        dao.allOpsNow().filter { it.method == "UPLOAD" || it.method == "WEBDAV" }.forEach { referenced += it.body }
         dao.pendingLogsNow().forEach { l -> l.imageUrls.urlList().forEach { referenced += it.removePrefix("file://") } }
         val cutoff = System.currentTimeMillis() - 24 * 3600 * 1000L
         files.filter { it.absolutePath !in referenced && it.lastModified() < cutoff }.forEach { it.delete() }
@@ -771,6 +796,25 @@ class Repository(
                 description = "${spec.typeLabel} „${spec.name}“", entityKind = "log", entityId = id,
             )
         )
+
+        // Fotos zusätzlich in Nextcloud ablegen: <Ordner>/<Feld oder Tier>/<Datum Titel>.jpg
+        if (spec.photos.isNotEmpty() && nextcloud.configured) {
+            val subject = (spec.locations + spec.assets).firstOrNull()?.name ?: "Allgemein"
+            val stamp = Instant.ofEpochSecond(spec.timestamp).atZone(ZoneId.systemDefault())
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH-mm"))
+            spec.photos.forEachIndexed { i, path ->
+                val nr = if (spec.photos.size > 1) " (${i + 1})" else ""
+                val remote = prefs.ncFolder + "/" + Nextcloud.clean(subject) + "/" +
+                    Nextcloud.clean("$stamp ${spec.name}$nr") + ".jpg"
+                dao.enqueue(
+                    PendingOp(
+                        method = "WEBDAV", path = remote, body = path,
+                        description = "Foto nach Nextcloud: $subject", entityKind = "nextcloud",
+                        entityId = UUID.randomUUID().toString(),
+                    )
+                )
+            }
+        }
 
         // Optional: Fotos zusätzlich direkt am Tier / an der Kultur ablegen
         if (spec.attachPhotosToAssets) {

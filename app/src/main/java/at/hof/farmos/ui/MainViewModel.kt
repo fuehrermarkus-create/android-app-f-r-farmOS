@@ -236,6 +236,28 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ---------------------------------------------------------------- Nextcloud
+
+    private val _ncStatus = MutableStateFlow<String?>(null)
+    val ncStatus: StateFlow<String?> = _ncStatus.asStateFlow()
+
+    fun saveNextcloud(url: String, user: String, password: String, folder: String) {
+        prefs.ncUrl = url; prefs.ncUser = user; prefs.ncPassword = password; prefs.ncFolder = folder
+        if (url.isBlank() || user.isBlank() || password.isBlank()) {
+            _ncStatus.value = "Nextcloud-Ablage ausgeschaltet"
+            return
+        }
+        viewModelScope.launch {
+            _ncStatus.value = "Teste Verbindung …"
+            _ncStatus.value = try {
+                repo.nextcloud.test()
+                "✅ Verbunden – neue Fotos landen in „${prefs.ncFolder}“"
+            } catch (e: Exception) {
+                "❌ " + (e.message ?: Repository.describe(e))
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- Feldlisten
 
     fun saveFieldList(id: String?, name: String, work: ListWork?, notes: String?, locationIds: List<String>, then: (String) -> Unit) {

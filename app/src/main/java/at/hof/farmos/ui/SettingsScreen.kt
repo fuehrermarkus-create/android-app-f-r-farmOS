@@ -28,6 +28,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
@@ -96,6 +98,8 @@ fun SettingsScreen(vm: MainViewModel) {
                 }
             }
 
+            item { NextcloudCard(vm) }
+
             if (ops.isEmpty()) item {
                 ListItem(
                     headlineContent = { Text("Alles übertragen") },
@@ -159,5 +163,55 @@ fun SettingsScreen(vm: MainViewModel) {
             },
             dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text("Abbrechen") } },
         )
+    }
+}
+
+/** Einstellungen für die Fotoablage in Nextcloud (Fotos am PC als Ordner). */
+@Composable
+private fun NextcloudCard(vm: MainViewModel) {
+    val status by vm.ncStatus.collectAsState()
+    var open by rememberSaveable { mutableStateOf(false) }
+    var url by rememberSaveable { mutableStateOf(vm.prefs.ncUrl) }
+    var user by rememberSaveable { mutableStateOf(vm.prefs.ncUser) }
+    var pass by rememberSaveable { mutableStateOf(vm.prefs.ncPassword) }
+    var folder by rememberSaveable { mutableStateOf(vm.prefs.ncFolder) }
+    val active = vm.prefs.ncUrl.isNotBlank() && vm.prefs.ncUser.isNotBlank() && vm.prefs.ncPassword.isNotBlank()
+
+    Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Fotos in Nextcloud", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        if (active) "An – Ordner „${vm.prefs.ncFolder}“, sortiert nach Feld/Tier"
+                        else "Aus – Fotos zusätzlich als Ordner am PC ablegen",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline,
+                    )
+                }
+                TextButton(onClick = { open = !open }) { Text(if (open) "Schließen" else "Einrichten") }
+            }
+            if (open) {
+                OutlinedTextField(url, { url = it }, label = { Text("Nextcloud-Adresse") },
+                    placeholder = { Text("z. B. http://192.168.68.120") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(user, { user = it }, label = { Text("Benutzername") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    pass, { pass = it }, label = { Text("App-Passwort") }, singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    supportingText = { Text("Nextcloud › Einstellungen › Sicherheit › „Neues App-Passwort erstellen“") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(folder, { folder = it }, label = { Text("Ordner") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { vm.saveNextcloud(url, user, pass, folder) }) { Text("Speichern & testen") }
+                    if (active) OutlinedButton(onClick = { pass = ""; vm.saveNextcloud(url, user, "", folder) }) {
+                        Text("Ausschalten")
+                    }
+                }
+            }
+            status?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        }
     }
 }

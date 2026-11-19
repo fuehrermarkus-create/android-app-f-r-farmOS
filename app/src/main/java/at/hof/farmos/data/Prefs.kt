@@ -39,6 +39,20 @@ class Prefs(context: Context) {
         get() = sp.getLong("last_sync", 0L)
         set(v) = sp.edit().putLong("last_sync", v).apply()
 
+    // Nextcloud-Fotoablage
+    var ncUrl: String
+        get() = sp.getString("nc_url", "") ?: ""
+        set(v) = sp.edit().putString("nc_url", v.trim().trimEnd('/')).apply()
+    var ncUser: String
+        get() = sp.getString("nc_user", "") ?: ""
+        set(v) = sp.edit().putString("nc_user", v.trim()).apply()
+    var ncPassword: String
+        get() = sp.getString("nc_password", "") ?: ""
+        set(v) = sp.edit().putString("nc_password", v.trim()).apply()
+    var ncFolder: String
+        get() = sp.getString("nc_folder", "farmOS Fotos") ?: "farmOS Fotos"
+        set(v) = sp.edit().putString("nc_folder", v.trim().trim('/').ifBlank { "farmOS Fotos" }).apply()
+
     /** Letzter Fehler beim Abgleich (bleibt sichtbar, bis ein Abgleich klappt). */
     var lastSyncError: String?
         get() = sp.getString("last_sync_error", null)
