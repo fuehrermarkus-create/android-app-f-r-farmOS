@@ -67,7 +67,6 @@ data class AnimalTypeEntity(
     @PrimaryKey val id: String,
     val name: String,
     val pending: Boolean = false,
-    val description: String? = null,
 )
 
 /**
@@ -80,6 +79,7 @@ data class TermEntity(
     val vocab: String,
     val name: String,
     val pending: Boolean = false,
+    val description: String? = null,
 )
 
 @Entity(tableName = "logs")
