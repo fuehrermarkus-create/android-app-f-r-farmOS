@@ -327,9 +327,15 @@ class Repository(
                 status = a.str("status") ?: "active",
                 imageUrls = imageUrls(o, plantList.included),
                 locationIds = o.relationIds("location").joinToString(","),
+                lat = geoCenter(a)?.first,
+                lon = geoCenter(a)?.second,
             )
         }
-        dao.replaceLocations(lands + structures + plants)
+        // In der App gesetzte Positionen behalten
+        val pins = dao.locationsNow().filter { it.pinLat != null && it.pinLon != null }.associateBy { it.id }
+        dao.replaceLocations((lands + structures + plants).map { loc ->
+            pins[loc.id]?.let { p -> loc.copy(pinLat = p.pinLat, pinLon = p.pinLon) } ?: loc
+        })
 
         // Tiere
         val animalList = fetch("Tiere", "/api/asset/animal?filter[status]=active&page[limit]=50&include=image")
@@ -471,6 +477,7 @@ class Repository(
                 ?.replace(',', '.')?.toDoubleOrNull()
         val area = ha?.let { String.format(Locale.GERMAN, "%.2f ha", it) }
         val flagValues = (a["flag"] as? JsonArray)?.mapNotNull { (it as? JsonPrimitive)?.content } ?: emptyList()
+        val center = geoCenter(a)
         return LocationEntity(
             id = str("id")!!,
             kind = kind,
@@ -483,6 +490,8 @@ class Repository(
             imageUrls = imageUrls(this, included),
             flags = flagValues.joinToString(","),
             areaHa = ha,
+            lat = center?.first,
+            lon = center?.second,
         )
     }
 
@@ -880,6 +889,33 @@ class Repository(
         )
     }
 
+    // ---------------------------------------------------------------- Position einer Fläche
+
+    /**
+     * Speichert die Position in der App. Hat die Fläche in farmOS noch keine Geometrie,
+     * wird der Punkt auch dort eingetragen (dann sieht man ihn auf der farmOS-Karte).
+     */
+    suspend fun setPosition(location: LocationEntity, lat: Double?, lon: Double?) {
+        dao.setPin(location.id, lat, lon)
+        if (lat != null && lon != null && location.lat == null && location.kind != "plant") {
+            val body = buildJsonObject {
+                putJsonObject("data") {
+                    put("type", "asset--${location.kind}")
+                    put("id", location.id)
+                    putJsonObject("attributes") {
+                        putJsonObject("intrinsic_geometry") { put("value", wktPoint(lat, lon)) }
+                    }
+                }
+            }
+            dao.enqueue(
+                PendingOp(
+                    method = "PATCH", path = "/api/asset/${location.kind}/${location.id}", body = body.toString(),
+                    description = "Position von „${location.name}“", entityKind = "geo", entityId = location.id,
+                )
+            )
+        }
+    }
+
     // ---------------------------------------------------------------- Markierung (z. B. Blühfläche)
 
     suspend fun setFlag(location: LocationEntity, flag: String, on: Boolean) {
@@ -921,6 +957,28 @@ class Repository(
         private fun placeholder(key: String) = "$PLACEHOLDER_PREFIX$key@@"
 
         private val isoFormat = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+
+        /**
+         * Mittelpunkt einer farmOS-Geometrie. farmOS liefert lat/lon meist schon mit,
+         * sonst Mittelwert der Punkte aus dem WKT-Text.
+         */
+        fun geoCenter(attributes: JsonObject): Pair<Double, Double>? {
+            for (key in listOf("intrinsic_geometry", "geometry")) {
+                val g = attributes[key] as? JsonObject ?: continue
+                val la = g.str("lat")?.toDoubleOrNull()
+                val lo = g.str("lon")?.toDoubleOrNull()
+                if (la != null && lo != null && !(la == 0.0 && lo == 0.0)) return la to lo
+                val wkt = g.str("value") ?: continue
+                val pts = Regex("(-?[0-9]+(?:\\.[0-9]+)?)\\s+(-?[0-9]+(?:\\.[0-9]+)?)").findAll(wkt)
+                    .mapNotNull { m ->
+                        val x = m.groupValues[1].toDoubleOrNull()
+                        val y = m.groupValues[2].toDoubleOrNull()
+                        if (x != null && y != null) y to x else null // WKT: „Länge Breite“
+                    }.toList()
+                if (pts.isNotEmpty()) return pts.map { it.first }.average() to pts.map { it.second }.average()
+            }
+            return null
+        }
 
         fun wktPoint(lat: Double, lon: Double): String =
             String.format(Locale.US, "POINT (%.7f %.7f)", lon, lat)

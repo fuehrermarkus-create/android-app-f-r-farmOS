@@ -7,6 +7,15 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+/** 1.3 -> 1.4: Positionen der Flächen. */
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        for (c in listOf("lat", "lon", "pinLat", "pinLon")) {
+            db.execSQL("ALTER TABLE `locations` ADD COLUMN `$c` REAL")
+        }
+    }
+}
+
 /** 1.2 -> 1.3: Begriffe, Markierungen, Kulturen am Feld; Warteschlange bleibt erhalten. */
 val MIGRATION_2_3 = object : Migration(2, 3) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -31,7 +40,7 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         TermEntity::class,
         PendingOp::class,
     ],
-    version = 3,
+    version = 4,
     exportSchema = false,
 )
 abstract class FarmDatabase : RoomDatabase() {
@@ -40,7 +49,7 @@ abstract class FarmDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): FarmDatabase =
             Room.databaseBuilder(context, FarmDatabase::class.java, "farmos_hof.db")
-                .addMigrations(MIGRATION_2_3)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4)
                 .fallbackToDestructiveMigration()
                 .build()
     }

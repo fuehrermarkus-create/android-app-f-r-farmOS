@@ -135,3 +135,15 @@ sudo docker exec -u www-data farmos drush cr
 
 Danach sind Blühflächen auch in farmOS in den Flächenlisten als Markierung sichtbar und filterbar.
 Für die Aussaat muss in farmOS das Modul „Seeding log“ (Aussaat-Log) aktiv sein.
+
+## Position von Flächen teilen (ab 1.4)
+
+Auf der Seite einer Fläche (oder eines Gebäudes) gibt es den Bereich **📍 Position**:
+- **Per WhatsApp senden**: schickt Name, Größe, Kultur und einen Google-Maps-Link (WhatsApp zeigt daraus eine Kartenvorschau).
+- **Teilen**: an jede andere App (SMS, Mail, Signal …). **Navigation**: öffnet die Karten-App.
+
+Woher kommt die Position?
+- Ist die Fläche in farmOS auf der Karte eingezeichnet, nimmt die App deren Mittelpunkt.
+- Sonst setzt du sie selbst: **„Aktuellen Standort übernehmen“** (z. B. an der Zufahrt stehend) oder
+  **„Koordinaten eingeben“** (in Google Maps lange drücken, Koordinaten kopieren, einfügen).
+  Hat die Fläche in farmOS noch keine Geometrie, wird der Punkt dort auch eingetragen.

@@ -230,6 +230,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Position einer Fläche setzen (null = in der App gesetzte Position löschen). */
+    fun setPosition(location: LocationEntity, lat: Double?, lon: Double?) {
+        safeLaunch("Position speichern") {
+            repo.setPosition(location, lat, lon)
+            afterLocalChange(if (lat != null) "Position von „${location.name}“ gespeichert" else "Gesetzte Position gelöscht")
+        }
+    }
+
     /** Fläche als Blühfläche markieren bzw. Markierung entfernen. */
     fun setBluehflaeche(location: LocationEntity, on: Boolean) {
         safeLaunch("Markierung") {

@@ -199,6 +199,9 @@ fun LocationDetailScreen(
                     }
                 }
             }
+            item {
+                PositionCard(vm, l, crops.map { it.subtype ?: it.name }.distinct())
+            }
             if (isLand) item {
                 Card(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
                     Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {

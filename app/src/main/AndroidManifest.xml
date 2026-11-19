@@ -13,6 +13,9 @@
         <intent>
             <action android:name="android.media.action.IMAGE_CAPTURE" />
         </intent>
+        <!-- Position direkt an WhatsApp schicken -->
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
     </queries>
 
     <application

@@ -169,6 +169,12 @@ abstract class FarmDao {
     @Query("DELETE FROM terms")
     abstract suspend fun wipeTerms()
 
+    @Query("UPDATE locations SET pinLat = :lat, pinLon = :lon WHERE id = :id")
+    abstract suspend fun setPin(id: String, lat: Double?, lon: Double?)
+
+    @Query("SELECT * FROM locations")
+    abstract suspend fun locationsNow(): List<LocationEntity>
+
     @Query("UPDATE locations SET flags = :flags WHERE id = :id")
     abstract suspend fun setFlags(id: String, flags: String)
 

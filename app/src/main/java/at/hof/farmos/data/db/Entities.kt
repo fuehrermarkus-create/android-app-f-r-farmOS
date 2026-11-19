@@ -43,8 +43,21 @@ data class LocationEntity(
     val locationIds: String = "",
     /** Größe in Hektar (aus farmOS oder aus den Notizen, z. B. „1,6821 ha“) */
     val areaHa: Double? = null,
+    /** Mittelpunkt der Geometrie aus farmOS */
+    val lat: Double? = null,
+    val lon: Double? = null,
+    /** In der App gesetzte Position (z. B. Zufahrt) – bleibt beim Abgleich erhalten */
+    val pinLat: Double? = null,
+    val pinLon: Double? = null,
 ) {
     fun flagList(): List<String> = flags.split(",").filter { it.isNotBlank() }
+
+    /** Position zum Teilen: in der App gesetzt, sonst aus farmOS */
+    fun position(): Pair<Double, Double>? = when {
+        pinLat != null && pinLon != null -> pinLat to pinLon
+        lat != null && lon != null -> lat to lon
+        else -> null
+    }
 }
 
 @Entity(tableName = "animal_types")
