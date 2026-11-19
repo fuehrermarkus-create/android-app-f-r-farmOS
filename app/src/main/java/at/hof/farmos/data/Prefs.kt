@@ -39,6 +39,11 @@ class Prefs(context: Context) {
         get() = sp.getLong("last_sync", 0L)
         set(v) = sp.edit().putLong("last_sync", v).apply()
 
+    /** farmOS 4: Assets haben „archived“ statt „status“ (wird automatisch erkannt). */
+    var assetsUseArchived: Boolean
+        get() = sp.getBoolean("assets_use_archived", false)
+        set(v) = sp.edit().putBoolean("assets_use_archived", v).apply()
+
     // Nextcloud-Fotoablage
     var ncUrl: String
         get() = sp.getString("nc_url", "") ?: ""

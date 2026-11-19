@@ -350,6 +350,34 @@ class Repository(
             else throw ApiException(e.code, "$label: ${e.message}")
         }
 
+    /**
+     * Aktive Assets laden – farmOS 3 filtert über „status“, farmOS 4 über „archived“.
+     * Die App merkt sich, welche Variante der Server versteht.
+     */
+    private suspend fun fetchAssets(label: String, bundle: String): ApiList {
+        val v4 = prefs.assetsUseArchived
+        fun path(useArchived: Boolean) = "/api/asset/$bundle?" +
+            (if (useArchived) "filter[archived]=0" else "filter[status]=active") + "&page[limit]=50&include=image"
+        return try {
+            fetch(label, path(v4))
+        } catch (e: ApiException) {
+            if (e.code == 400 || e.code == 422) {
+                prefs.assetsUseArchived = !v4
+                fetch(label, path(!v4))
+            } else throw e
+        }
+    }
+
+    /** "active"/"archived" aus farmOS 3 (status) oder farmOS 4 (archived = true/false). */
+    private fun assetStatus(a: JsonObject): String {
+        val archived = (a["archived"] as? JsonPrimitive)?.content
+        return when {
+            archived == "true" -> "archived"
+            archived == "false" -> "active"
+            else -> a.str("status") ?: "active"
+        }
+    }
+
     private suspend fun pull() {
         hiddenWarnings.clear()
 
@@ -388,15 +416,15 @@ class Repository(
         dao.replaceTerms("flag", flagList)
 
         // Flächen und Gebäude
-        val landList = fetch("Flächen", "/api/asset/land?filter[status]=active&page[limit]=50&include=image")
+        val landList = fetchAssets("Flächen", "land")
         val lands = landList.data.map { it.toLocation("land", "land_type", landList.included) }
-        val structList = fetch("Gebäude", "/api/asset/structure?filter[status]=active&page[limit]=50&include=image")
+        val structList = fetchAssets("Gebäude", "structure")
         val structures = structList.data.map { it.toLocation("structure", "structure_type", structList.included) }
         val locNames = (lands + structures).associate { it.id to it.name }
 
         // Kulturen (Pflanzungen) mit Kulturart
         val plantTypes = termNames
-        val plantList = fetch("Kulturen", "/api/asset/plant?filter[status]=active&page[limit]=50&include=image")
+        val plantList = fetchAssets("Kulturen", "plant")
         val plants = plantList.data.map { o ->
             val a = o.attributes
             LocationEntity(
@@ -409,7 +437,7 @@ class Repository(
                 areaInfo = null,
                 locationNames = o.relationIds("location").mapNotNull { locNames[it] }
                     .joinToString(", ").ifBlank { null },
-                status = a.str("status") ?: "active",
+                status = assetStatus(a),
                 imageUrls = imageUrls(o, plantList.included),
                 locationIds = o.relationIds("location").joinToString(","),
                 lat = geoCenter(a)?.first,
@@ -435,7 +463,7 @@ class Repository(
         })
 
         // Maschinen
-        val eqList = fetch("Maschinen", "/api/asset/equipment?filter[status]=active&page[limit]=50&include=image")
+        val eqList = fetchAssets("Maschinen", "equipment")
         dao.replaceEquipment(eqList.data.map { o ->
             val a = o.attributes
             EquipmentEntity(
@@ -445,13 +473,13 @@ class Repository(
                 model = a.str("model"),
                 serial = a.str("serial_number"),
                 notes = a.textField("notes"),
-                status = a.str("status") ?: "active",
+                status = assetStatus(a),
                 imageUrls = imageUrls(o, eqList.included),
             )
         })
 
         // Tiere
-        val animalList = fetch("Tiere", "/api/asset/animal?filter[status]=active&page[limit]=50&include=image")
+        val animalList = fetchAssets("Tiere", "animal")
         val animals = animalList.data.map { o ->
             val a = o.attributes
             val typeId = o.relationIds("animal_type").firstOrNull()
@@ -467,7 +495,7 @@ class Repository(
                 notes = a.textField("notes"),
                 locationNames = o.relationIds("location").mapNotNull { locNames[it] }
                     .joinToString(", ").ifBlank { null },
-                status = a.str("status") ?: "active",
+                status = assetStatus(a),
                 imageUrls = imageUrls(o, animalList.included),
             )
         }
@@ -628,6 +656,12 @@ class Repository(
             out += DiagItem("Benutzer", false, describe(e))
         }
 
+        out += DiagItem(
+            "farmOS-Version",
+            true,
+            if (prefs.assetsUseArchived) "4.x erkannt (Archiv-Feld)" else "3.x (oder noch nicht erkannt)",
+        )
+
         // 4) Jeder Datenbereich einzeln
         val checks = listOf(
             "Tierarten" to "/api/taxonomy_term/animal_type",
@@ -682,7 +716,7 @@ class Repository(
             notes = notes,
             areaInfo = area,
             locationNames = null,
-            status = a.str("status") ?: "active",
+            status = assetStatus(a),
             imageUrls = imageUrls(this, included),
             flags = flagValues.joinToString(","),
             areaHa = ha,
@@ -739,7 +773,6 @@ class Repository(
                 put("id", id)
                 putJsonObject("attributes") {
                     put("name", name)
-                    put("status", "active")
                     if (sex != null) put("sex", sex)
                     if (birthTs != null) put("birthdate", isoTime(birthTs))
                     if (!idTag.isNullOrBlank()) {
@@ -1029,7 +1062,6 @@ class Repository(
                     put("id", plantId)
                     putJsonObject("attributes") {
                         put("name", plantName)
-                        put("status", "active")
                         if (!d.variety.isNullOrBlank()) putJsonObject("notes") {
                             put("value", "Sorte: ${d.variety.trim()}"); put("format", "default")
                         }
@@ -1120,7 +1152,6 @@ class Repository(
                 put("id", id)
                 putJsonObject("attributes") {
                     put("name", name.trim())
-                    put("status", "active")
                     if (!manufacturer.isNullOrBlank()) put("manufacturer", manufacturer.trim())
                     if (!model.isNullOrBlank()) put("model", model.trim())
                     if (!serial.isNullOrBlank()) put("serial_number", serial.trim())

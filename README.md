@@ -189,3 +189,9 @@ Klick auf den Namen den Eintrag.
 - **Positionen (Zufahrt)** werden als Eintrag „Zufahrt: <Fläche>“ mit GPS-Punkt (Kategorie „Position“)
   gespeichert und sind damit auf allen Handys und auf der farmOS-Karte sichtbar.
 - Ältere, nur am Handy gespeicherte Listen und Positionen werden beim ersten Abgleich automatisch übertragen.
+
+## farmOS 3 und 4 (ab 1.9)
+
+Die App erkennt automatisch, ob farmOS 3.x (Asset-Feld `status`) oder 4.x (Asset-Feld `archived`) läuft,
+und sendet beim Anlegen kein `status` mehr. Hinweis farmOS 4: Konten mit der Rolle „Worker“ dürfen keine
+Taxonomie-Begriffe mehr ändern – für die App (Listen, neue Mittel/Kulturarten) Konten mit Rolle „Manager“ verwenden.
