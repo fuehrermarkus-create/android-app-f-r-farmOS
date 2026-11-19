@@ -172,3 +172,9 @@ Tab **Maschinen**: Maschinen anlegen (Name, Hersteller, Modell, Seriennummer), V
 **Wartung**, **Reparatur** und **Schaden/Foto** mit Betriebsstunden erfassen. Bei Feldarbeiten (Aussaat,
 Pflanzenschutz, Düngung, Ernte) können die eingesetzten Maschinen angegeben werden.
 „Sync & Einstellungen“ ist jetzt das Zahnrad oben rechts.
+
+## Fotos in farmOS im Browser
+
+`server/fotos-einrichten.sh` legt in farmOS die Seite **/fotos** an: alle Fotos aus Einträgen als Galerie
+(neueste zuerst, mit Datum, Eintrag, Tier/Fläche, Suchfeld). Klick auf ein Foto öffnet es groß,
+Klick auf den Namen den Eintrag.
