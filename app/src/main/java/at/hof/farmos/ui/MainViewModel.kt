@@ -7,6 +7,7 @@ import at.hof.farmos.FarmApp
 import at.hof.farmos.data.BLUEH_FLAG
 import at.hof.farmos.data.FieldWorkDraft
 import at.hof.farmos.data.ListWork
+import at.hof.farmos.data.MachineLogDraft
 import at.hof.farmos.data.LogDraft
 import at.hof.farmos.data.db.FieldListEntity
 import at.hof.farmos.data.db.LocationEntity
@@ -57,6 +58,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val fieldLists = share(repo.fieldLists)
     val allListItems = share(repo.allListItems)
     fun fieldList(id: String) = repo.fieldList(id)
+    val equipment = share(repo.equipment)
+    fun equipmentItem(id: String) = repo.equipmentItem(id)
     fun listItems(listId: String) = repo.listItems(listId)
     val recentLogs = share(repo.recentLogs)
     val pendingOps = share(repo.pendingOps)
@@ -255,6 +258,25 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 "❌ " + (e.message ?: Repository.describe(e))
             }
+        }
+    }
+
+    // ---------------------------------------------------------------- Maschinen
+
+    fun createEquipment(name: String, manufacturer: String?, model: String?, serial: String?, notes: String?) {
+        safeLaunch("Maschine speichern") {
+            repo.createEquipment(name, manufacturer, model, serial, notes)
+            afterLocalChange("Maschine „${name.trim()}“ gespeichert")
+        }
+    }
+
+    fun createMachineLog(draft: MachineLogDraft) {
+        safeLaunch("${draft.work.label} speichern") {
+            withContext(Dispatchers.IO) {
+                draft.photos.forEach { PhotoStore.writeMeta(it, draft.timestamp, null, null, "${draft.work.label} ${draft.machine.name}") }
+            }
+            repo.createMachineLog(draft)
+            afterLocalChange("${draft.work.label} gespeichert")
         }
     }
 

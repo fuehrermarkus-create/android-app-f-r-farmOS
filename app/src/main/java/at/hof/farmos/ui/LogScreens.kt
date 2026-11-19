@@ -348,7 +348,7 @@ fun QuickLogScreen(
             if (showKinds) {
                 Text("Art", style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LogKind.entries.filter { it != LogKind.SEEDING && it != LogKind.HARVEST }.forEach { k ->
+                    LogKind.entries.filter { it != LogKind.SEEDING && it != LogKind.HARVEST && it != LogKind.MAINTENANCE }.forEach { k ->
                         FilterChip(kind == k, { kind = k }, { Text(k.label) })
                     }
                 }

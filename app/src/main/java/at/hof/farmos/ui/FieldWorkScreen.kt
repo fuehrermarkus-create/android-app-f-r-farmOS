@@ -85,6 +85,8 @@ fun FieldWorkScreen(
     val allLocations by vm.locations.collectAsState()
     val plantTypes by vm.plantTypes.collectAsState()
     val materials by vm.materials.collectAsState()
+    val machines by vm.equipment.collectAsState()
+    var machineIds by rememberSaveable { mutableStateOf<List<String>>(ArrayList()) }
     val places = allLocations.filter { it.kind != "plant" }
     val plants = allLocations.filter { it.kind == "plant" }
 
@@ -223,6 +225,20 @@ fun FieldWorkScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
 
+            // ---- Womit?
+            if (machines.isNotEmpty()) {
+                Section("Maschinen (optional)")
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    machines.forEach { m ->
+                        FilterChip(
+                            selected = m.id in machineIds,
+                            onClick = { machineIds = ArrayList(if (m.id in machineIds) machineIds - m.id else machineIds + m.id) },
+                            label = { Text(m.name) },
+                        )
+                    }
+                }
+            }
+
             // ---- Wann?
             Section("Zeit")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -277,6 +293,8 @@ fun FieldWorkScreen(
                             treatedHa = treated.ifBlank { null },
                             reason = reason.ifBlank { null },
                             photos = photos,
+                            equipment = machines.filter { it.id in machineIds }
+                                .map { AssetRef(it.id, "asset--equipment", it.name) },
                         )
                     )
                     if (f != null) onDone()

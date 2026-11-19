@@ -34,7 +34,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun SettingsScreen(vm: MainViewModel) {
+fun SettingsScreen(vm: MainViewModel, onBack: () -> Unit) {
     val ops by vm.pendingOps.collectAsState()
     val syncing by vm.syncing.collectAsState()
     val lastSync by vm.lastSync.collectAsState()
@@ -45,7 +45,7 @@ fun SettingsScreen(vm: MainViewModel) {
     val open = ops.count { !it.failed }
     val failed = ops.filter { it.failed }
 
-    ScreenScaffold(title = "Sync & Einstellungen") { pad ->
+    ScreenScaffold(title = "Sync & Einstellungen", onBack = onBack) { pad ->
         LazyColumn(Modifier.padding(pad).fillMaxSize()) {
             item {
                 Card(Modifier.fillMaxWidth().padding(12.dp)) {

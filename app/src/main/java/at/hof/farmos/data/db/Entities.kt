@@ -95,6 +95,8 @@ data class LogEntity(
     val pending: Boolean = false,
     /** Kategorien als Namen, kommagetrennt (z. B. "Pflanzenschutz") */
     val categoryNames: String = "",
+    /** eingesetzte Maschinen (kommagetrennt) */
+    val equipmentIds: String = "",
 )
 
 /** Warteschlange für Änderungen, die noch zum Server müssen. */
@@ -137,4 +139,18 @@ data class FieldListItem(
     val doneAt: Long? = null,
     /** schon als Log in farmOS eingetragen */
     val logged: Boolean = false,
+)
+
+/** Maschinen / Geräte (farmOS „Equipment“). */
+@Entity(tableName = "equipment")
+data class EquipmentEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val manufacturer: String?,
+    val model: String?,
+    val serial: String?,
+    val notes: String?,
+    val status: String,
+    val imageUrls: String = "",
+    val pending: Boolean = false,
 )

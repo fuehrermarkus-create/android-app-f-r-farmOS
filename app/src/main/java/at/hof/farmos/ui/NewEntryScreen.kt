@@ -17,7 +17,11 @@ import androidx.compose.material.icons.filled.Agriculture
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Compost
+import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.Grass
+import androidx.compose.material.icons.filled.Handyman
+import androidx.compose.material.icons.filled.ReportProblem
+import androidx.compose.material.icons.filled.Work
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Pets
 import androidx.compose.material.icons.filled.Restaurant
@@ -46,6 +50,8 @@ fun NewEntryScreen(
     onFieldWork: (FieldWork) -> Unit,
     onQuickLog: (LogKind, Boolean) -> Unit,
     onNewAnimal: () -> Unit,
+    onMachineWork: (at.hof.farmos.data.MachineWork) -> Unit,
+    onNewMachine: () -> Unit,
 ) {
     ScreenScaffold(title = "Was möchtest du erfassen?", onBack = onBack) { pad ->
         Column(
@@ -58,7 +64,7 @@ fun NewEntryScreen(
                     Action("Aussaat", Icons.Default.Grass) { onFieldWork(FieldWork.SEEDING) },
                     Action("Pflanzenschutz", Icons.Default.WaterDrop) { onFieldWork(FieldWork.SPRAYING) },
                     Action("Düngung", Icons.Default.Compost) { onFieldWork(FieldWork.FERTILIZING) },
-                    Action("Ernte", Icons.Default.Agriculture) { onFieldWork(FieldWork.HARVEST) },
+                    Action("Ernte", Icons.Default.Grain) { onFieldWork(FieldWork.HARVEST) },
                 ),
             )
             Group(
@@ -71,11 +77,20 @@ fun NewEntryScreen(
                 ),
             )
             Group(
+                "An den Maschinen",
+                listOf(
+                    Action("Wartung", Icons.Default.Build) { onMachineWork(at.hof.farmos.data.MachineWork.MAINTENANCE) },
+                    Action("Reparatur", Icons.Default.Handyman) { onMachineWork(at.hof.farmos.data.MachineWork.REPAIR) },
+                    Action("Schaden / Foto", Icons.Default.ReportProblem) { onMachineWork(at.hof.farmos.data.MachineWork.DAMAGE) },
+                    Action("Neue Maschine", Icons.Default.Agriculture) { onNewMachine() },
+                ),
+            )
+            Group(
                 "Allgemein",
                 listOf(
                     Action("Foto", Icons.Default.CameraAlt) { onQuickLog(LogKind.OBSERVATION, true) },
                     Action("Beobachtung", Icons.Default.Visibility) { onQuickLog(LogKind.OBSERVATION, false) },
-                    Action("Sonstige Arbeit", Icons.Default.Build) { onQuickLog(LogKind.ACTIVITY, false) },
+                    Action("Sonstige Arbeit", Icons.Default.Work) { onQuickLog(LogKind.ACTIVITY, false) },
                 ),
             )
         }

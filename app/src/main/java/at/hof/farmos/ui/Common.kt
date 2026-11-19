@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
@@ -244,6 +245,11 @@ fun DateDialog(initial: LocalDate?, onPick: (LocalDate) -> Unit, onDismiss: () -
     }
 }
 
+/** Öffnet „Sync & Einstellungen“ (oben rechts auf den Hauptseiten); pending = wartende Änderungen. */
+class SettingsLink(val open: () -> Unit, val pending: Int)
+
+val LocalSettingsLink = androidx.compose.runtime.staticCompositionLocalOf<SettingsLink?> { null }
+
 /** Seitengerüst mit Titelleiste für alle Unterseiten. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -265,7 +271,21 @@ fun ScreenScaffold(
                         }
                     }
                 },
-                actions = actions,
+                actions = {
+                    actions()
+                    val link = LocalSettingsLink.current
+                    if (onBack == null && link != null) {
+                        androidx.compose.material3.IconButton(onClick = link.open) {
+                            if (link.pending > 0) {
+                                androidx.compose.material3.BadgedBox(
+                                    badge = { androidx.compose.material3.Badge { Text(link.pending.toString()) } },
+                                ) { Icon(Icons.Default.Settings, "Sync & Einstellungen") }
+                            } else {
+                                Icon(Icons.Default.Settings, "Sync & Einstellungen")
+                            }
+                        }
+                    }
+                },
                 colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                 ),

@@ -7,6 +7,18 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
+/** 1.6 -> 1.7: Maschinen. */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `equipment` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, " +
+                "`manufacturer` TEXT, `model` TEXT, `serial` TEXT, `notes` TEXT, `status` TEXT NOT NULL, " +
+                "`imageUrls` TEXT NOT NULL, `pending` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+        )
+        db.execSQL("ALTER TABLE `logs` ADD COLUMN `equipmentIds` TEXT NOT NULL DEFAULT ''")
+    }
+}
+
 /** 1.4 -> 1.5: Feldlisten. */
 val MIGRATION_4_5 = object : Migration(4, 5) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -56,9 +68,10 @@ val MIGRATION_2_3 = object : Migration(2, 3) {
         TermEntity::class,
         FieldListEntity::class,
         FieldListItem::class,
+        EquipmentEntity::class,
         PendingOp::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = false,
 )
 abstract class FarmDatabase : RoomDatabase() {
@@ -67,7 +80,7 @@ abstract class FarmDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): FarmDatabase =
             Room.databaseBuilder(context, FarmDatabase::class.java, "farmos_hof.db")
-                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                 .fallbackToDestructiveMigration()
                 .build()
     }

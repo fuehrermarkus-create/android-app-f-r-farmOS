@@ -2,6 +2,7 @@ package at.hof.farmos.data
 
 import at.hof.farmos.data.db.AnimalEntity
 import at.hof.farmos.data.db.AnimalTypeEntity
+import at.hof.farmos.data.db.EquipmentEntity
 import at.hof.farmos.data.db.TermEntity
 import at.hof.farmos.data.db.FarmDao
 import at.hof.farmos.data.db.FieldListEntity
@@ -37,7 +38,8 @@ enum class LogKind(val apiType: String, val label: String, val movement: Boolean
     ACTIVITY("activity", "Aktivität"),
     MOVEMENT("activity", "Umstallen/Weide", movement = true),
     HARVEST("harvest", "Ernte"),
-    SEEDING("seeding", "Aussaat");
+    SEEDING("seeding", "Aussaat"),
+    MAINTENANCE("maintenance", "Wartung");
 
     companion object {
         fun labelFor(apiType: String, movement: Boolean): String =
@@ -95,6 +97,23 @@ data class FieldWorkDraft(
     val treatedHa: String? = null,        // behandelte Fläche in ha
     val reason: String? = null,           // Pflanzenschutz: Grund / Schaderreger
     val photos: List<String> = emptyList(),
+    val equipment: List<AssetRef> = emptyList(), // eingesetzte Maschinen
+)
+
+/** Arbeiten an Maschinen. */
+enum class MachineWork(val label: String, val logType: String, val category: String) {
+    MAINTENANCE("Wartung", "maintenance", "Wartung"),
+    REPAIR("Reparatur", "maintenance", "Reparatur"),
+    DAMAGE("Schaden / Beobachtung", "observation", "Maschine"),
+}
+
+data class MachineLogDraft(
+    val work: MachineWork,
+    val machine: AssetRef,
+    val timestamp: Long,
+    val notes: String?,
+    val hours: String? = null,      // Betriebsstunden-Stand
+    val photos: List<String> = emptyList(),
 )
 
 /** Was auf den Feldern einer Liste gemacht wird – bestimmt, wie es in farmOS eingetragen wird. */
@@ -114,6 +133,7 @@ val UNIT_MEASURE = linkedMapOf(
     "kg/ha" to "rate", "l/ha" to "rate", "m³/ha" to "rate", "t/ha" to "rate", "dt/ha" to "rate",
     "Körner/m²" to "rate", "kg" to "weight", "dt" to "weight", "t" to "weight",
     "l" to "volume", "m³" to "volume", "Stk" to "count", "Ballen" to "count", "ha" to "area",
+    "h" to "time",
 )
 
 /** farmOS-Markierung für Blühflächen (muss in farmOS angelegt sein, siehe README). */
@@ -138,6 +158,8 @@ class Repository(
     val fieldLists = dao.fieldLists()
     val allListItems = dao.allListItems()
     fun fieldList(id: String) = dao.fieldList(id)
+    val equipment = dao.equipment()
+    fun equipmentItem(id: String) = dao.equipmentItem(id)
     fun listItems(listId: String) = dao.listItems(listId)
     val recentLogs = dao.recentLogs()
     val pendingOps = dao.pendingOps()
@@ -250,6 +272,7 @@ class Repository(
             "animal_type" -> dao.markTypeSynced(op.entityId)
             "log" -> dao.markLogSynced(op.entityId)
             "term" -> dao.markTermSynced(op.entityId)
+            "equipment" -> dao.markEquipmentSynced(op.entityId)
         }
     }
 
@@ -261,6 +284,7 @@ class Repository(
             "animal_type" -> dao.deletePendingType(op.entityId)
             "log" -> dao.deletePendingLog(op.entityId)
             "term" -> dao.deletePendingTerm(op.entityId)
+            "equipment" -> dao.deletePendingEquipment(op.entityId)
             "upload" -> {
                 // Verweis auf das Foto aus abhängigen Einträgen entfernen, damit diese trotzdem ankommen.
                 val ref = Regex(",?\\{\"type\":\"file--file\",\"id\":\"" +
@@ -380,6 +404,22 @@ class Repository(
             pins[loc.id]?.let { p -> loc.copy(pinLat = p.pinLat, pinLon = p.pinLon) } ?: loc
         })
 
+        // Maschinen
+        val eqList = fetch("Maschinen", "/api/asset/equipment?filter[status]=active&page[limit]=50&include=image")
+        dao.replaceEquipment(eqList.data.map { o ->
+            val a = o.attributes
+            EquipmentEntity(
+                id = o.str("id")!!,
+                name = a.str("name") ?: "?",
+                manufacturer = a.str("manufacturer"),
+                model = a.str("model"),
+                serial = a.str("serial_number"),
+                notes = a.textField("notes"),
+                status = a.str("status") ?: "active",
+                imageUrls = imageUrls(o, eqList.included),
+            )
+        })
+
         // Tiere
         val animalList = fetch("Tiere", "/api/asset/animal?filter[status]=active&page[limit]=50&include=image")
         val animals = animalList.data.map { o ->
@@ -423,6 +463,7 @@ class Repository(
                     imageUrls = imageUrls(o, page.included),
                     hasGeo = !a.textField("geometry").isNullOrBlank(),
                     categoryNames = o.relationIds("category").mapNotNull { termNames[it] }.joinToString(", "),
+                    equipmentIds = o.relationIds("equipment").joinToString(","),
                 )
             }
         }
@@ -488,6 +529,7 @@ class Repository(
             "Mittel/Dünger" to "/api/taxonomy_term/material_type",
             "Einheiten" to "/api/taxonomy_term/unit",
             "Markierungen" to "/api/flag/flag",
+            "Maschinen" to "/api/asset/equipment",
         ) + LogKind.entries.filter { !it.movement }.map { "Logs ${it.label}" to "/api/log/${it.apiType}" }
         for ((label, path) in checks) {
             out += try {
@@ -722,6 +764,7 @@ class Repository(
         /** weitere Beziehungen, z. B. "material_type" -> [(taxonomy_term--material_type, id)] */
         val extraRefs: Map<String, List<Pair<String, String>>> = emptyMap(),
         val attachPhotosToAssets: Boolean = false,
+        val equipment: List<AssetRef> = emptyList(),
     )
 
     private suspend fun enqueueLog(spec: LogSpec): String {
@@ -746,6 +789,7 @@ class Repository(
         val relations = mutableMapOf<String, List<Pair<String, String>>>()
         if (spec.assets.isNotEmpty()) relations["asset"] = spec.assets.map { it.type to it.id }
         if (spec.locations.isNotEmpty()) relations["location"] = spec.locations.map { it.type to it.id }
+        if (spec.equipment.isNotEmpty()) relations["equipment"] = spec.equipment.map { it.type to it.id }
         if (spec.quantityIds.isNotEmpty()) relations["quantity"] = spec.quantityIds.map { "quantity--standard" to it }
         if (photoKeys.isNotEmpty()) relations["image"] = photoKeys.map { "file--file" to placeholder(it) }
         if (spec.categoryIds.isNotEmpty()) {
@@ -787,6 +831,7 @@ class Repository(
                     hasGeo = spec.latitude != null,
                     pending = true,
                     categoryNames = spec.categoryNames.joinToString(", "),
+                    equipmentIds = spec.equipment.joinToString(",") { it.id },
                 )
             )
         )
@@ -947,6 +992,55 @@ class Repository(
                 categoryIds = listOf(categoryId),
                 categoryNames = listOf(w.category),
                 extraRefs = extra,
+                equipment = d.equipment,
+            )
+        )
+    }
+
+    // ---------------------------------------------------------------- Maschinen
+
+    suspend fun createEquipment(name: String, manufacturer: String?, model: String?, serial: String?, notes: String?) {
+        val id = UUID.randomUUID().toString()
+        val body = buildJsonObject {
+            putJsonObject("data") {
+                put("type", "asset--equipment")
+                put("id", id)
+                putJsonObject("attributes") {
+                    put("name", name.trim())
+                    put("status", "active")
+                    if (!manufacturer.isNullOrBlank()) put("manufacturer", manufacturer.trim())
+                    if (!model.isNullOrBlank()) put("model", model.trim())
+                    if (!serial.isNullOrBlank()) put("serial_number", serial.trim())
+                    if (!notes.isNullOrBlank()) putJsonObject("notes") { put("value", notes); put("format", "default") }
+                }
+            }
+        }
+        dao.upsertEquipment(
+            listOf(
+                EquipmentEntity(
+                    id, name.trim(), manufacturer?.ifBlank { null }, model?.ifBlank { null },
+                    serial?.ifBlank { null }, notes?.ifBlank { null }, "active", pending = true,
+                )
+            )
+        )
+        dao.enqueue(
+            PendingOp(
+                method = "POST", path = "/api/asset/equipment", body = body.toString(),
+                description = "Maschine „${name.trim()}“", entityKind = "equipment", entityId = id,
+            )
+        )
+    }
+
+    suspend fun createMachineLog(d: MachineLogDraft) {
+        val w = d.work
+        val title = "${w.label}: ${d.machine.name}"
+        val catId = ensureTerm("log_category", w.category)
+        val hoursQty = d.hours?.let { enqueueQuantity(it, "h", "Betriebsstunden", title, unitTerm = true) }
+        enqueueLog(
+            LogSpec(
+                apiType = w.logType, typeLabel = w.label, name = title, timestamp = d.timestamp,
+                notes = d.notes, assets = listOf(d.machine), quantityIds = listOfNotNull(hoursQty),
+                photos = d.photos, categoryIds = listOf(catId), categoryNames = listOf(w.category),
             )
         )
     }

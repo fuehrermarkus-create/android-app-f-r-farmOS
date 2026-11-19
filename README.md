@@ -165,3 +165,10 @@ Sicherheit), Ordner. Neue Fotos landen zusätzlich in `<Ordner>/<Feld oder Tier>
 
 `server/farmos-anpassen.sh` entfernt ungenutzte Bereiche (nur ohne Einträge), stellt auf Deutsch um,
 vergibt einfache Bezeichnungen und legt die Markierung „Blühfläche“ an. Vorher Snapshot machen.
+
+## Maschinen (ab 1.7)
+
+Tab **Maschinen**: Maschinen anlegen (Name, Hersteller, Modell, Seriennummer), Verlauf und Fotos je Maschine,
+**Wartung**, **Reparatur** und **Schaden/Foto** mit Betriebsstunden erfassen. Bei Feldarbeiten (Aussaat,
+Pflanzenschutz, Düngung, Ernte) können die eingesetzten Maschinen angegeben werden.
+„Sync & Einstellungen“ ist jetzt das Zahnrad oben rechts.

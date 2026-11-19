@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Agriculture
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Landscape
@@ -23,6 +24,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -40,6 +42,13 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import at.hof.farmos.data.FieldWork
+import at.hof.farmos.data.MachineWork
+import at.hof.farmos.ui.EquipmentDetailScreen
+import at.hof.farmos.ui.EquipmentListScreen
+import at.hof.farmos.ui.EquipmentNewScreen
+import at.hof.farmos.ui.LocalSettingsLink
+import at.hof.farmos.ui.MachineLogScreen
+import at.hof.farmos.ui.SettingsLink
 import at.hof.farmos.data.LogKind
 import at.hof.farmos.ui.FieldWorkScreen
 import at.hof.farmos.ui.ListDetailScreen
@@ -85,10 +94,13 @@ private data class Tab(val route: String, val label: String, val icon: ImageVect
 private val tabs = listOf(
     Tab("animals", "Tiere", Icons.Default.Pets),
     Tab("locations", "Flächen", Icons.Default.Landscape),
+    Tab("equipment", "Maschinen", Icons.Default.Agriculture),
     Tab("lists", "Listen", Icons.Default.Checklist),
     Tab("logs", "Einträge", Icons.Default.Description),
-    Tab("settings", "Sync", Icons.Default.Sync),
 )
+
+private fun machineLogRoute(work: MachineWork, machine: String?, camera: Boolean) =
+    "machinelog?work=${work.name}&machine=${machine ?: ""}&camera=$camera"
 
 private fun fieldWorkRoute(work: FieldWork, field: String? = null, plants: List<String> = emptyList()) =
     "fieldwork?work=${work.name}&field=${field ?: ""}&plants=${plants.joinToString(",")}"
@@ -118,6 +130,8 @@ private fun AppRoot(vm: MainViewModel) {
         }
     }
 
+    val settingsLink = SettingsLink(open = { nav.navigate("settings") { launchSingleTop = true } }, pending = ops.size)
+    CompositionLocalProvider(LocalSettingsLink provides settingsLink) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
         bottomBar = {
@@ -134,13 +148,9 @@ private fun AppRoot(vm: MainViewModel) {
                                 }
                             },
                             icon = {
-                                if (tab.route == "settings" && ops.isNotEmpty()) {
-                                    BadgedBox(badge = { Badge { Text(ops.size.toString()) } }) {
-                                        Icon(tab.icon, null)
-                                    }
-                                } else Icon(tab.icon, null)
+                                Icon(tab.icon, null)
                             },
-                            label = { Text(tab.label) },
+                            label = { Text(tab.label, maxLines = 1) },
                         )
                     }
                 }
@@ -216,6 +226,8 @@ private fun AppRoot(vm: MainViewModel) {
                     onFieldWork = { w -> replace(fieldWorkRoute(w)) },
                     onQuickLog = { k, cam -> replace(quickLogRoute(kind = k, camera = cam)) },
                     onNewAnimal = { replace("animal_new") },
+                    onMachineWork = { w -> replace(machineLogRoute(w, null, w == MachineWork.DAMAGE)) },
+                    onNewMachine = { replace("equipment_new") },
                 )
             }
             composable(
@@ -235,7 +247,36 @@ private fun AppRoot(vm: MainViewModel) {
                     onDone = { nav.popBackStack() },
                 )
             }
-            composable("settings") { SettingsScreen(vm) }
+            composable("settings") { SettingsScreen(vm, onBack = { nav.popBackStack() }) }
+            composable("equipment") {
+                EquipmentListScreen(vm, onOpen = { nav.navigate("equipment/$it") }, onNew = { nav.navigate("equipment_new") })
+            }
+            composable("equipment/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
+                val id = e.arguments?.getString("id").orEmpty()
+                EquipmentDetailScreen(
+                    vm, id,
+                    onBack = { nav.popBackStack() },
+                    onWork = { w, camera -> nav.navigate(machineLogRoute(w, id, camera)) },
+                )
+            }
+            composable("equipment_new") { EquipmentNewScreen(vm, onDone = { nav.popBackStack() }) }
+            composable(
+                "machinelog?work={work}&machine={machine}&camera={camera}",
+                arguments = listOf(
+                    navArgument("work") { type = NavType.StringType; defaultValue = MachineWork.MAINTENANCE.name },
+                    navArgument("machine") { type = NavType.StringType; defaultValue = "" },
+                    navArgument("camera") { type = NavType.BoolType; defaultValue = false },
+                ),
+            ) { e ->
+                val a = e.arguments
+                MachineLogScreen(
+                    vm,
+                    preMachine = a?.getString("machine")?.ifBlank { null },
+                    preWork = MachineWork.entries.firstOrNull { it.name == a?.getString("work") } ?: MachineWork.MAINTENANCE,
+                    startCamera = a?.getBoolean("camera") ?: false,
+                    onDone = { nav.popBackStack() },
+                )
+            }
 
             composable("animal/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { e ->
                 val id = e.arguments?.getString("id").orEmpty()
@@ -287,5 +328,6 @@ private fun AppRoot(vm: MainViewModel) {
                 )
             }
         }
+    }
     }
 }

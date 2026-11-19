@@ -74,7 +74,8 @@ abstract class FarmDao {
 
     @Query(
         "SELECT * FROM logs WHERE (',' || assetIds || ',') LIKE '%,' || :id || ',%' " +
-            "OR (',' || locationIds || ',') LIKE '%,' || :id || ',%' ORDER BY timestamp DESC"
+            "OR (',' || locationIds || ',') LIKE '%,' || :id || ',%' " +
+            "OR (',' || equipmentIds || ',') LIKE '%,' || :id || ',%' ORDER BY timestamp DESC"
     )
     abstract fun logsFor(id: String): Flow<List<LogEntity>>
 
@@ -181,6 +182,34 @@ abstract class FarmDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     abstract suspend fun upsertLocation(item: LocationEntity)
 
+    // ---------------------------------------------------------------- Maschinen
+    @Query("SELECT * FROM equipment WHERE status = 'active' ORDER BY name COLLATE NOCASE")
+    abstract fun equipment(): Flow<List<EquipmentEntity>>
+
+    @Query("SELECT * FROM equipment WHERE id = :id")
+    abstract fun equipmentItem(id: String): Flow<EquipmentEntity?>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    abstract suspend fun upsertEquipment(items: List<EquipmentEntity>)
+
+    @Query("DELETE FROM equipment WHERE pending = 0")
+    abstract suspend fun clearSyncedEquipment()
+
+    @Transaction
+    open suspend fun replaceEquipment(items: List<EquipmentEntity>) {
+        clearSyncedEquipment()
+        upsertEquipment(items)
+    }
+
+    @Query("UPDATE equipment SET pending = 0 WHERE id = :id")
+    abstract suspend fun markEquipmentSynced(id: String)
+
+    @Query("DELETE FROM equipment WHERE id = :id AND pending = 1")
+    abstract suspend fun deletePendingEquipment(id: String)
+
+    @Query("DELETE FROM equipment")
+    abstract suspend fun wipeEquipment()
+
     // ---------------------------------------------------------------- Feldlisten
     @Query("SELECT * FROM field_lists ORDER BY archived, createdAt DESC")
     abstract fun fieldLists(): Flow<List<FieldListEntity>>
@@ -248,6 +277,6 @@ abstract class FarmDao {
 
     @Transaction
     open suspend fun wipeAll() {
-        wipeAnimals(); wipeLogs(); wipeTypes(); clearLocations(); clearOps(); wipeTerms()
+        wipeAnimals(); wipeLogs(); wipeTypes(); clearLocations(); clearOps(); wipeTerms(); wipeEquipment()
     }
 }
