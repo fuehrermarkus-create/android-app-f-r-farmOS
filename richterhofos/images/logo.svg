@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Richterhof">
+  <rect width="64" height="64" rx="16" fill="#2f6b3a"/>
+  <path d="M14 34 32 18l18 16v14a2 2 0 0 1-2 2H16a2 2 0 0 1-2-2z" fill="#fff"/>
+  <path d="M26 50V38h12v12" fill="#2f6b3a"/>
+  <path d="M26 38l12 12M38 38 26 50" stroke="#fff" stroke-width="2"/>
+  <path d="M10 35 32 15l22 20" fill="none" stroke="#e9c46a" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

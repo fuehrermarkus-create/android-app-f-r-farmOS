@@ -1,0 +1,10 @@
+oberflaeche:
+  version: 1.0.0
+  css:
+    theme:
+      css/oberflaeche.css: {}
+start:
+  version: 1.0.0
+  css:
+    theme:
+      css/start.css: {}

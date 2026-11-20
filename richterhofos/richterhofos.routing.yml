@@ -1,0 +1,7 @@
+richterhofos.start:
+  path: '/hof'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\StartController::start'
+    _title: 'Richterhof'
+  requirements:
+    _user_is_logged_in: 'TRUE'

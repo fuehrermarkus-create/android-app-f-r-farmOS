@@ -1,0 +1,101 @@
+{#
+/**
+ * Hof-Übersicht (/hof) von richterhofOS.
+ */
+#}
+<div class="rh-start">
+
+  <header class="rh-kopf">
+    <div>
+      <p class="rh-datum">{{ datum }}</p>
+      <h2 class="rh-gruss">{{ gruss }}</h2>
+    </div>
+    {% if aktionen %}
+      <nav class="rh-aktionen" aria-label="Schnell anlegen">
+        {% for a in aktionen %}
+          <a class="rh-knopf{{ loop.first ? ' rh-knopf--haupt' }}" href="{{ a.url }}">+ {{ a.titel }}</a>
+        {% endfor %}
+      </nav>
+    {% endif %}
+  </header>
+
+  <section class="rh-zahlen" aria-label="Bestand">
+    {% for z in zahlen %}
+      <a class="rh-zahl rh-zahl--{{ z.typ }}" {% if z.url %}href="{{ z.url }}"{% endif %}>
+        <span class="rh-zahl__wert">{{ z.anzahl }}</span>
+        <span class="rh-zahl__titel">{{ z.titel }}</span>
+      </a>
+    {% endfor %}
+  </section>
+
+  <div class="rh-raster">
+
+    <section class="rh-karte rh-karte--arbeiten">
+      <div class="rh-karte__kopf">
+        <h3>Letzte Arbeiten</h3>
+        {% if links.eintraege %}<a href="{{ links.eintraege }}">Alle Einträge</a>{% endif %}
+      </div>
+      {% if arbeiten %}
+        <ul class="rh-liste">
+          {% for a in arbeiten %}
+            <li class="rh-eintrag">
+              <span class="rh-eintrag__datum">{{ a.datum }}</span>
+              <span class="rh-eintrag__text">
+                {% if a.url %}<a href="{{ a.url }}">{{ a.titel }}</a>{% else %}{{ a.titel }}{% endif %}
+                <small>{{ a.art }}{% if a.wo %} · {{ a.wo }}{% endif %}</small>
+              </span>
+              {% if a.offen %}<span class="rh-marke rh-marke--offen">offen</span>{% else %}<span class="rh-marke">erledigt</span>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="rh-leer">Noch keine Einträge.</p>
+      {% endif %}
+    </section>
+
+    <section class="rh-karte rh-karte--listen">
+      <div class="rh-karte__kopf">
+        <h3>Listen</h3>
+      </div>
+      {% if listen %}
+        <ul class="rh-liste">
+          {% for l in listen %}
+            <li class="rh-fortschritt">
+              <div class="rh-fortschritt__zeile">
+                {% if l.url %}<a href="{{ l.url }}">{{ l.titel }}</a>{% else %}<span>{{ l.titel }}</span>{% endif %}
+                <span class="rh-fortschritt__zahl">{{ l.fertig }} / {{ l.gesamt }}</span>
+              </div>
+              <div class="rh-balken" role="progressbar" aria-valuenow="{{ l.prozent }}" aria-valuemin="0" aria-valuemax="100">
+                <span style="width: {{ l.prozent }}%"></span>
+              </div>
+              {% if l.offen %}<small>{{ l.offen }} noch offen</small>{% else %}<small>alles erledigt ✓</small>{% endif %}
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="rh-leer">Keine Listen. Listen legst du in der App unter „Listen“ an.</p>
+      {% endif %}
+    </section>
+
+  </div>
+
+  <section class="rh-karte rh-karte--fotos">
+    <div class="rh-karte__kopf">
+      <h3>Neueste Fotos</h3>
+      {% if links.fotos %}<a href="{{ links.fotos }}">Alle Fotos</a>{% endif %}
+    </div>
+    {% if fotos %}
+      <div class="rh-fotos">
+        {% for f in fotos %}
+          <a class="rh-foto" {% if f.url %}href="{{ f.url }}"{% endif %} title="{{ f.titel }}">
+            <img src="{{ f.bild }}" alt="{{ f.titel }}" loading="lazy">
+            <span>{{ f.datum }} · {{ f.titel }}</span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="rh-leer">Noch keine Fotos. Fotos aus der App erscheinen hier nach dem Abgleich.</p>
+    {% endif %}
+  </section>
+
+</div>

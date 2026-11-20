@@ -1,0 +1,7 @@
+richterhofos.start:
+  title: 'Hof-Übersicht'
+  description: 'Startseite mit den letzten Arbeiten, offenen Listen und Fotos'
+  route_name: richterhofos.start
+  parent: farm.base
+  menu_name: admin
+  weight: -100

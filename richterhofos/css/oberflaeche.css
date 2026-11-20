@@ -1,0 +1,24 @@
+/* richterhofOS – ruhigere, modernere Gestaltung für die ganze Oberfläche (Gin) */
+:root {
+  --rh-radius: 12px;
+}
+body {
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+/* Tabellen luftiger und mit Hervorhebung beim Überfahren */
+.gin-table td, table.views-table td { padding-top: .8rem; padding-bottom: .8rem; }
+.gin-table tbody tr:hover, table.views-table tbody tr:hover { background: rgba(47, 107, 58, .05); }
+/* Knöpfe und Eingabefelder runder */
+.button, .action-link, input.form-text, input.form-email, input.form-number, textarea.form-textarea, select.form-select {
+  border-radius: var(--rh-radius) !important;
+}
+.button { font-weight: 600; }
+/* Karten und Kästen weicher */
+.card, .gin-layer-wrapper, .layout-region__content, details.claro-details {
+  border-radius: 16px;
+}
+/* Seitentitel etwas kräftiger */
+.page-title { letter-spacing: -.01em; font-weight: 700; }
+/* Hinweis „Powered by farmOS“ dezenter */
+.block-farm-powered-by-block { opacity: .6; font-size: .85rem; }

@@ -1,0 +1,158 @@
+<?php
+
+/**
+ * @file
+ * richterhofOS – einfache Oberfläche für den Richterhof auf Basis von farmOS.
+ *
+ * - Menü nur mit Hof-Übersicht, Tieren, Feldern, Maschinen, Einträgen und Fotos
+ * - einfache deutsche Begriffe wie in der App „farmOS Hof“
+ * - modernere, ruhigere Gestaltung
+ */
+
+declare(strict_types=1);
+
+/**
+ * Arten von Dingen, die im Menü erscheinen: Typ => [Menütitel, Reihenfolge].
+ */
+function richterhofos_sichtbare_dinge(): array {
+  return [
+    'animal' => ['Tiere', 1],
+    'land' => ['Felder', 2],
+    'equipment' => ['Maschinen', 3],
+  ];
+}
+
+/**
+ * Einfache Bezeichnungen (Einzahl) für Arten von Dingen und Einträgen.
+ */
+function richterhofos_bezeichnungen(): array {
+  return [
+    'asset' => [
+      'animal' => 'Tier',
+      'land' => 'Feld',
+      'equipment' => 'Maschine',
+      'plant' => 'Kultur',
+      'structure' => 'Gebäude',
+    ],
+    'log' => [
+      'activity' => 'Arbeit',
+      'observation' => 'Beobachtung',
+      'medical' => 'Behandlung',
+      'input' => 'Ausbringung',
+      'harvest' => 'Ernte',
+      'seeding' => 'Aussaat',
+      'maintenance' => 'Wartung',
+      'birth' => 'Geburt',
+    ],
+  ];
+}
+
+/**
+ * Implements hook_entity_bundle_info_alter().
+ *
+ * Ändert nur die angezeigten Namen, nichts an den gespeicherten Daten.
+ */
+function richterhofos_entity_bundle_info_alter(array &$bundles): void {
+  foreach (richterhofos_bezeichnungen() as $entity_type => $namen) {
+    foreach ($namen as $bundle => $label) {
+      if (isset($bundles[$entity_type][$bundle])) {
+        $bundles[$entity_type][$bundle]['label'] = $label;
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_menu_links_discovered_alter().
+ *
+ * Räumt das farmOS-Menü auf: Tiere, Felder und Maschinen stehen direkt oben,
+ * Pläne, Mengen, Standorte, Berichte und andere Arten von Dingen verschwinden.
+ * Die Seiten selbst bleiben erreichbar, nur die Menüpunkte werden ausgeblendet.
+ */
+function richterhofos_menu_links_discovered_alter(array &$links): void {
+  $sichtbar = richterhofos_sichtbare_dinge();
+
+  foreach ($links as $id => &$link) {
+    $route = (string) ($link['route_name'] ?? '');
+    $arg = (string) ($link['route_parameters']['arg_0'] ?? '');
+
+    // Arten von Dingen: nur Tiere, Felder, Maschinen – direkt unter „farmOS“.
+    if ($route === 'view.farm_asset.page_type' && !str_starts_with($id, 'farm.log')) {
+      if (isset($sichtbar[$arg])) {
+        $link['title'] = $sichtbar[$arg][0];
+        $link['parent'] = 'farm.base';
+        $link['weight'] = $sichtbar[$arg][1];
+        $link['expanded'] = FALSE;
+      }
+      else {
+        $link['enabled'] = FALSE;
+      }
+      continue;
+    }
+
+    // Einträge (Logs) als eigener Hauptpunkt.
+    if ($id === 'views_view:views.farm_log.page') {
+      $link['title'] = 'Einträge';
+      $link['parent'] = 'farm.base';
+      $link['weight'] = 5;
+      continue;
+    }
+
+    // Nicht gebrauchte Bereiche ausblenden.
+    $ausblenden = [
+      'farm.records',
+      'views_view:views.farm_asset.page',
+      'views_view:views.farm_plan.page',
+      'views_view:views.farm_log_quantity.page',
+      'farm.locations',
+      'farm.report',
+    ];
+    if (in_array($id, $ausblenden, TRUE)
+      || str_starts_with($id, 'farm.plan.type')
+      || str_starts_with($id, 'farm.quantity.type')
+      || $route === 'farm.dashboard') {
+      $link['enabled'] = FALSE;
+      continue;
+    }
+
+    // Verbleibende Hauptpunkte verständlich benennen.
+    $titel = [
+      'farm.base' => 'Richterhof',
+      'farm.people' => 'Personen',
+      'farm.setup' => 'Einstellungen',
+    ];
+    if (isset($titel[$id])) {
+      $link['title'] = $titel[$id];
+    }
+    if ($id === 'farm.people') {
+      $link['weight'] = 50;
+    }
+  }
+}
+
+/**
+ * Implements hook_page_attachments().
+ */
+function richterhofos_page_attachments(array &$attachments): void {
+  $attachments['#attached']['library'][] = 'richterhofos/oberflaeche';
+}
+
+/**
+ * Implements hook_theme().
+ */
+function richterhofos_theme(): array {
+  return [
+    'richterhofos_start' => [
+      'variables' => [
+        'gruss' => '',
+        'datum' => '',
+        'zahlen' => [],
+        'aktionen' => [],
+        'arbeiten' => [],
+        'listen' => [],
+        'fotos' => [],
+        'links' => [],
+      ],
+    ],
+  ];
+}

@@ -1,0 +1,92 @@
+<?php
+
+/**
+ * @file
+ * Installieren / Entfernen von richterhofOS.
+ */
+
+declare(strict_types=1);
+
+use Drupal\Core\Serialization\Yaml;
+use Drupal\views\Views;
+
+/**
+ * Implements hook_install().
+ */
+function richterhofos_install(): void {
+  richterhofos_fotoseite_einrichten();
+
+  // Hof-Übersicht als Startseite.
+  \Drupal::configFactory()->getEditable('system.site')
+    ->set('page.front', '/hof')
+    ->save();
+
+  // Name und Logo in der Oberfläche (Gin).
+  $pfad = \Drupal::service('extension.list.module')->getPath('richterhofos');
+  $gin = \Drupal::configFactory()->getEditable('gin.settings');
+  if (!$gin->isNew()) {
+    $gin->set('preset_accent_color', 'green')
+      ->set('preset_focus_color', 'green')
+      ->set('logo.use_default', FALSE)
+      ->set('logo.path', $pfad . '/images/logo.svg')
+      ->save();
+  }
+  \Drupal::configFactory()->getEditable('system.site')
+    ->set('name', 'Richterhof')
+    ->save();
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function richterhofos_uninstall(): void {
+  // Startseite und Logo wieder auf farmOS zurückstellen.
+  \Drupal::configFactory()->getEditable('system.site')
+    ->set('page.front', '/dashboard')
+    ->save();
+  $gin = \Drupal::configFactory()->getEditable('gin.settings');
+  if (!$gin->isNew()) {
+    $farm = \Drupal::service('extension.list.module')->getPath('farm_ui_theme');
+    $gin->set('preset_focus_color', 'orange')
+      ->set('logo.path', $farm . '/logo.png')
+      ->save();
+  }
+}
+
+/**
+ * Legt die Seite „Fotos“ (/fotos) an oder ersetzt sie durch die mitgelieferte.
+ */
+function richterhofos_fotoseite_einrichten(): void {
+  $pfad = \Drupal::service('extension.list.module')->getPath('richterhofos');
+  $daten = Yaml::decode(file_get_contents($pfad . '/config/views/fotos.yml'));
+  $speicher = \Drupal::entityTypeManager()->getStorage('view');
+  if ($alt = $speicher->load($daten['id'])) {
+    $alt->delete();
+  }
+  $speicher->create($daten)->save();
+
+  // Fehlende Feld-Einstellungen mit den Standardwerten von Views ergänzen.
+  $view = Views::getView($daten['id']);
+  if ($view) {
+    foreach (array_keys($daten['display']) as $display_id) {
+      if (!$view->setDisplay($display_id)) {
+        continue;
+      }
+      foreach (['field', 'filter', 'sort', 'argument', 'relationship'] as $typ) {
+        foreach ($view->display_handler->getHandlers($typ) as $id => $handler) {
+          $view->setHandler($display_id, $typ, $id, $handler->options);
+        }
+      }
+    }
+    $view->storage->save();
+  }
+  \Drupal::service('router.builder')->setRebuildNeeded();
+}
+
+/**
+ * Fotoseite auf den mitgelieferten Stand bringen.
+ */
+function richterhofos_update_10001(): string {
+  richterhofos_fotoseite_einrichten();
+  return 'Fotoseite aktualisiert.';
+}
