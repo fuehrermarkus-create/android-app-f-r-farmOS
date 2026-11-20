@@ -22,6 +22,28 @@ class Prefs(context: Context) {
         get() = sp.getString("username", "") ?: ""
         set(v) = sp.edit().putString("username", v).apply()
 
+    /** Zuletzt verwendeter Anwender (Pflanzenschutz-Aufzeichnung). */
+    var applicator: String
+        get() = sp.getString("applicator", "") ?: ""
+        set(v) = sp.edit().putString("applicator", v.trim()).apply()
+
+    /** Gemerkte Angaben je Mittel/Dünger (Zulassungsnummer, N-Gehalt …) als JSON-Objekt je Name. */
+    fun materialInfo(name: String): Map<String, String> {
+        val all = runCatching { org.json.JSONObject(sp.getString("material_info", "{}") ?: "{}") }.getOrNull()
+            ?: return emptyMap()
+        val o = all.optJSONObject(name.trim().lowercase()) ?: return emptyMap()
+        return o.keys().asSequence().associateWith { o.optString(it) }
+    }
+
+    fun rememberMaterial(name: String, info: Map<String, String?>) {
+        val all = runCatching { org.json.JSONObject(sp.getString("material_info", "{}") ?: "{}") }.getOrNull()
+            ?: org.json.JSONObject()
+        val o = all.optJSONObject(name.trim().lowercase()) ?: org.json.JSONObject()
+        info.forEach { (k, v) -> if (!v.isNullOrBlank()) o.put(k, v.trim()) }
+        all.put(name.trim().lowercase(), o)
+        sp.edit().putString("material_info", all.toString()).apply()
+    }
+
     var accessToken: String?
         get() = sp.getString("access_token", null)
         set(v) = sp.edit().putString("access_token", v).apply()

@@ -100,7 +100,33 @@ data class FieldWorkDraft(
     val reason: String? = null,           // Pflanzenschutz: Grund / Schaderreger
     val photos: List<String> = emptyList(),
     val equipment: List<AssetRef> = emptyList(), // eingesetzte Maschinen
+    // ---- Aufzeichnungspflichten (Pflanzenschutz nach VO (EU) 2023/564, Düngung nach NAPV)
+    val applicator: String? = null,       // Anwender
+    val registrationNo: String? = null,   // Pflanzenschutz: Zulassungsnummer
+    val eppo: String? = null,             // EPPO-Code der Kultur
+    val bbch: String? = null,             // BBCH-Stadium (wenn verlangt)
+    val fertilizerKind: String? = null,   // Düngung: Wirtschaftsdünger flüssig/fest, Mineraldünger …
+    val nContent: String? = null,         // Düngung: kg N je Mengeneinheit (bzw. % N bei kg)
+    val technique: String? = null,        // Düngung: Ausbringtechnik
+    val incorporatedAt: Long? = null,     // Düngung: Einarbeitung (Datum/Uhrzeit)
 )
+
+/** Häufige Kulturen mit EPPO-Code (Vorschlag, frei änderbar). */
+val EPPO_CODES = linkedMapOf(
+    "mais" to "ZEAMX", "silomais" to "ZEAMX", "körnermais" to "ZEAMX",
+    "winterweizen" to "TRZAW", "sommerweizen" to "TRZAS", "weizen" to "TRZAX",
+    "wintergerste" to "HORVW", "sommergerste" to "HORVS", "gerste" to "HORVX",
+    "winterroggen" to "SECCW", "roggen" to "SECCE", "hafer" to "AVESA",
+    "triticale" to "TTLSP", "dinkel" to "TRZSP",
+    "winterraps" to "BRSNW", "raps" to "BRSNN", "sojabohne" to "GLXMA", "soja" to "GLXMA",
+    "kartoffel" to "SOLTU", "zuckerrübe" to "BEAVA", "sonnenblume" to "HELAN",
+    "ackerbohne" to "VICFX", "erbse" to "PIBSX",
+)
+
+fun eppoFor(crop: String?): String? {
+    val c = crop?.trim()?.lowercase() ?: return null
+    return EPPO_CODES[c] ?: EPPO_CODES.entries.firstOrNull { c.contains(it.key) }?.value
+}
 
 /** Arbeiten an Maschinen. */
 enum class MachineWork(val label: String, val logType: String, val category: String) {
@@ -848,6 +874,7 @@ class Repository(
         label: String?,
         logName: String,
         unitTerm: Boolean,
+        materialId: String? = null,
     ): String? {
         val qty = value?.replace(',', '.')?.trim()?.toBigDecimalOrNull() ?: return null
         val q = qty.stripTrailingZeros().let { if (it.scale() < 0) it.setScale(0) else it }
@@ -862,7 +889,7 @@ class Repository(
         val id = UUID.randomUUID().toString()
         val body = buildJsonObject {
             putJsonObject("data") {
-                put("type", "quantity--standard")
+                put("type", if (materialId != null) "quantity--material" else "quantity--standard")
                 put("id", id)
                 putJsonObject("attributes") {
                     putJsonObject("value") {
@@ -873,21 +900,31 @@ class Repository(
                     if (!text.isNullOrBlank()) put("label", text)
                     if (unitTerm && measure != null) put("measure", measure)
                 }
-                if (unitId != null) putJsonObject("relationships") {
-                    putJsonObject("units") {
+                if (unitId != null || materialId != null) putJsonObject("relationships") {
+                    if (unitId != null) putJsonObject("units") {
                         putJsonObject("data") { put("type", "taxonomy_term--unit"); put("id", unitId) }
+                    }
+                    if (materialId != null) putJsonObject("material_type") {
+                        putJsonArray("data") {
+                            add(buildJsonObject { put("type", "taxonomy_term--material_type"); put("id", materialId) })
+                        }
                     }
                 }
             }
         }
         dao.enqueue(
             PendingOp(
-                method = "POST", path = "/api/quantity/standard", body = body.toString(),
+                method = "POST", path = if (materialId != null) "/api/quantity/material" else "/api/quantity/standard",
+                body = body.toString(),
                 description = "Menge zu „$logName“", entityKind = "quantity", entityId = id,
             )
         )
+        if (materialId != null) materialQuantities += id
         return id
     }
+
+    /** IDs der Mengen, die als Material-Menge (quantity--material) angelegt wurden. */
+    private val materialQuantities = mutableSetOf<String>()
 
     /** Alles, was ein Log braucht – gemeinsam für Schnell-Log und Feldarbeit. */
     private class LogSpec(
@@ -911,6 +948,8 @@ class Repository(
         val equipment: List<AssetRef> = emptyList(),
         /** "done" oder "pending" (geplant/offen) */
         val status: String = "done",
+        /** maschinenlesbare Zusatzdaten (farmOS-Feld „data“, JSON) */
+        val data: String? = null,
     )
 
     private suspend fun enqueueLog(spec: LogSpec): String {
@@ -936,7 +975,9 @@ class Repository(
         if (spec.assets.isNotEmpty()) relations["asset"] = spec.assets.map { it.type to it.id }
         if (spec.locations.isNotEmpty()) relations["location"] = spec.locations.map { it.type to it.id }
         if (spec.equipment.isNotEmpty()) relations["equipment"] = spec.equipment.map { it.type to it.id }
-        if (spec.quantityIds.isNotEmpty()) relations["quantity"] = spec.quantityIds.map { "quantity--standard" to it }
+        if (spec.quantityIds.isNotEmpty()) relations["quantity"] = spec.quantityIds.map {
+            (if (it in materialQuantities) "quantity--material" else "quantity--standard") to it
+        }
         if (photoKeys.isNotEmpty()) relations["image"] = photoKeys.map { "file--file" to placeholder(it) }
         if (spec.categoryIds.isNotEmpty()) {
             relations["category"] = spec.categoryIds.map { "taxonomy_term--log_category" to it }
@@ -952,6 +993,7 @@ class Repository(
                     put("timestamp", isoTime(spec.timestamp))
                     put("status", spec.status)
                     if (spec.movement) put("is_movement", true)
+                    if (!spec.data.isNullOrBlank()) put("data", spec.data)
                     if (!spec.notes.isNullOrBlank()) putJsonObject("notes") {
                         put("value", spec.notes); put("format", "default")
                     }
@@ -1091,11 +1133,9 @@ class Repository(
             assets += AssetRef(plantId, "asset--plant", plantName)
         }
 
-        // Mittel / Dünger
-        if ((w == FieldWork.SPRAYING || w == FieldWork.FERTILIZING) && !d.material.isNullOrBlank()) {
-            val matId = ensureTerm("material_type", d.material)
-            extra["material_type"] = listOf("taxonomy_term--material_type" to matId)
-        }
+        // Mittel / Dünger: farmOS speichert das Material an der Menge (quantity--material)
+        val matId = if ((w == FieldWork.SPRAYING || w == FieldWork.FERTILIZING) && !d.material.isNullOrBlank())
+            ensureTerm("material_type", d.material.trim()) else null
 
         val title = buildString {
             append(w.label)
@@ -1115,7 +1155,10 @@ class Repository(
             FieldWork.HARVEST -> "Erntemenge"
         }
         val quantities = listOfNotNull(
-            d.amount?.let { enqueueQuantity(it.value, it.unit, amountLabel, title, unitTerm = true) },
+            (d.amount ?: matId?.let { Amount("", "") })?.let {
+                if (it.value.isBlank()) null
+                else enqueueQuantity(it.value, it.unit, amountLabel, title, unitTerm = true, materialId = matId)
+            },
             d.water?.let { enqueueQuantity(it.value, it.unit, "Wasser", title, unitTerm = true) },
             d.treatedHa?.let { enqueueQuantity(it, "ha", "Behandelte Fläche", title, unitTerm = true) },
         )
@@ -1125,10 +1168,13 @@ class Repository(
             d.notes?.trim()?.ifBlank { null },
         ).joinToString("\n").ifBlank { null }
 
+        val record = recordData(d, title)
+
         enqueueLog(
             LogSpec(
                 apiType = w.logType, typeLabel = w.label, name = title, timestamp = d.timestamp,
                 notes = notes,
+                data = record,
                 movement = w == FieldWork.SEEDING && d.field != null, // Kultur steht danach auf dem Feld
                 assets = assets,
                 locations = listOfNotNull(d.field),
@@ -1140,6 +1186,43 @@ class Repository(
                 equipment = d.equipment,
             )
         )
+    }
+
+    /**
+     * Angaben für die Aufzeichnungspflichten als JSON im farmOS-Feld „data“.
+     * richterhofOS liest sie für die Jahresausgaben (Pflanzenschutz, Düngung).
+     */
+    private fun recordData(d: FieldWorkDraft, title: String): String? {
+        val w = d.work
+        if (w != FieldWork.SPRAYING && w != FieldWork.FERTILIZING) return null
+        fun num(v: String?) = v?.replace(',', '.')?.trim()?.toDoubleOrNull()
+        val crops = d.plants.map { it.name }
+        val o = buildJsonObject {
+            putJsonObject("richterhof") {
+                put("version", 1)
+                put("art", if (w == FieldWork.SPRAYING) "pflanzenschutz" else "duengung")
+                d.field?.let { put("feld", it.name); put("feld_id", it.id) }
+                d.material?.trim()?.ifBlank { null }?.let { put("mittel", it) }
+                d.amount?.let { a -> num(a.value)?.let { put("menge", it) }; put("einheit", a.unit) }
+                num(d.treatedHa)?.let { put("flaeche_ha", it) }
+                if (crops.isNotEmpty()) put("kultur", crops.joinToString(", "))
+                d.applicator?.trim()?.ifBlank { null }?.let { put("anwender", it) }
+                if (w == FieldWork.SPRAYING) {
+                    put("verwendung", "Freiland")
+                    d.registrationNo?.trim()?.ifBlank { null }?.let { put("zulassungsnummer", it) }
+                    d.eppo?.trim()?.uppercase()?.ifBlank { null }?.let { put("eppo", it) }
+                    d.bbch?.trim()?.ifBlank { null }?.let { put("bbch", it) }
+                    d.water?.let { a -> num(a.value)?.let { put("wasser_l_ha", it) } }
+                    d.reason?.trim()?.ifBlank { null }?.let { put("grund", it) }
+                } else {
+                    d.fertilizerKind?.let { put("duengerart", it) }
+                    num(d.nContent)?.let { put("n_gehalt", it) }
+                    d.technique?.let { put("technik", it) }
+                    d.incorporatedAt?.let { put("einarbeitung", isoTime(it)) }
+                }
+            }
+        }
+        return o.toString()
     }
 
     // ---------------------------------------------------------------- Maschinen
@@ -1230,7 +1313,6 @@ class Repository(
         loc: LocationEntity, done: Boolean, doneAt: Long?,
     ): String {
         val catId = work.category?.let { ensureTerm("log_category", it) }
-        val matId = work.material?.let { ensureTerm("material_type", it) }
         val title = "$listName – ${loc.name}"
         val areaQty = loc.areaHa?.let {
             enqueueQuantity(String.format(Locale.US, "%.4f", it), "ha", "Fläche", title, unitTerm = true)
@@ -1244,8 +1326,7 @@ class Repository(
                 quantityIds = listOfNotNull(areaQty),
                 categoryIds = listOfNotNull(catId, listId),
                 categoryNames = listOfNotNull(work.category),
-                extraRefs = matId?.let { mapOf("material_type" to listOf("taxonomy_term--material_type" to it)) }
-                    ?: emptyMap(),
+
                 status = if (done) "done" else "pending",
             )
         )
