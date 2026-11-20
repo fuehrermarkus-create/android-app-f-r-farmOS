@@ -62,3 +62,36 @@ richterhofos.bluehflaeche:
     parameters:
       asset:
         type: entity:asset
+richterhofos.aufzeichnungen:
+  path: '/aufzeichnungen'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\AufzeichnungenController::uebersicht'
+    _title: 'Aufzeichnungen'
+  requirements:
+    _user_is_logged_in: 'TRUE'
+richterhofos.psm:
+  path: '/aufzeichnungen/pflanzenschutz'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\AufzeichnungenController::psm'
+    _title_callback: '\Drupal\richterhofos\Controller\AufzeichnungenController::psmTitel'
+  requirements:
+    _user_is_logged_in: 'TRUE'
+richterhofos.psm_csv:
+  path: '/aufzeichnungen/pflanzenschutz/csv'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\AufzeichnungenController::psmCsv'
+  requirements:
+    _user_is_logged_in: 'TRUE'
+richterhofos.duengung:
+  path: '/aufzeichnungen/duengung'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\AufzeichnungenController::duengung'
+    _title_callback: '\Drupal\richterhofos\Controller\AufzeichnungenController::duengungTitel'
+  requirements:
+    _user_is_logged_in: 'TRUE'
+richterhofos.duengung_csv:
+  path: '/aufzeichnungen/duengung/csv'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\AufzeichnungenController::duengungCsv'
+  requirements:
+    _user_is_logged_in: 'TRUE'

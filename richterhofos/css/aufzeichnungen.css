@@ -1,0 +1,30 @@
+/* richterhofOS – Aufzeichnungen */
+.rh-ausgaben { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin: 1rem 0; }
+.rh-ausgabe {
+  display: flex; flex-direction: column; gap: .5rem; padding: 1.4rem; border-radius: 16px; background: #2f6b3a;
+  color: #fff !important; text-decoration: none !important; transition: transform .12s, box-shadow .12s;
+}
+.rh-ausgabe:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(47,107,58,.25); }
+.rh-ausgabe + .rh-ausgabe, .rh-ausgabe:nth-child(2) { background: #8a5a2b; }
+.rh-ausgabe__titel { font-size: 1.25rem; font-weight: 700; }
+.rh-ausgabe__text { opacity: .9; }
+.rh-ausgabe .rh-marke { align-self: flex-start; background: rgba(255,255,255,.2); color: #fff; }
+.rh-chip--aktion { border-color: #2f6b3a; color: #2f6b3a !important; font-weight: 600; }
+.rh-druckkopf { margin: .25rem 0 1rem; color: #1f2a22; }
+.rh-warnung { background: #fdf1dc; color: #7a4a00; padding: .6rem .9rem; border-radius: 10px; }
+.rh-fehlt { color: #b3261e; font-weight: 600; font-size: .85rem; }
+.rh-aufzeichnung { font-size: .88rem; }
+.rh-aufzeichnung td, .rh-aufzeichnung th { padding: .45rem .5rem !important; white-space: nowrap; }
+.rh-summen { max-width: 520px; }
+.rh-feldblock { margin: 1.25rem 0; }
+.rh-feldblock__titel { margin: 0; font-size: 1.1rem; }
+.rh-feldblock__titel small { font-weight: 500; color: #66736a; margin-left: .4rem; }
+.rh-feldblock__info { margin: .2rem 0 .5rem; color: #3b4a40; }
+@media print {
+  @page { size: A4 landscape; margin: 12mm; }
+  .rh-aufzeichnung { font-size: 8.5pt; }
+  .rh-aufzeichnung td, .rh-aufzeichnung th { white-space: normal; }
+  .rh-warnung { display: none; }
+  .rh-feldblock { break-inside: avoid; }
+  a { color: inherit !important; text-decoration: none !important; }
+}

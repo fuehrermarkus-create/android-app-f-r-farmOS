@@ -81,3 +81,10 @@
 .gin--dark-mode .rh-start { --rh-text: #e8ece9; --rh-grau: #a7b2aa; --rh-linie: #2e3631; --rh-karte: #1d2420; --rh-gruen-hell: #23382a; --rh-gruen: #7fc28c; }
 .gin--dark-mode .rh-knopf--haupt { background: #3f8a4c; }
 .rh-zahl--blueh::before { background: #d9a400; }
+
+.rh-aufz { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem; }
+.rh-aufz__knopf { display: flex; flex-direction: column; gap: .2rem; padding: 1rem 1.2rem; border-radius: var(--rh-radius); background: var(--rh-gruen); color: #fff !important; text-decoration: none !important; transition: transform .12s, box-shadow .12s; }
+.rh-aufz__knopf span { font-weight: 700; font-size: 1.05rem; }
+.rh-aufz__knopf small { opacity: .85; }
+.rh-aufz__knopf--duengung { background: var(--rh-erde); }
+.rh-aufz__knopf:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,.12); }

@@ -12,6 +12,9 @@ Zusatzmodul für farmOS 4 (läuft auch mit 3.5): einfache, moderne Oberfläche f
 - **Blühflächen**: 🌼-Spalte und Filter in „Was wächst wo“ (per Klick markieren/entfernen), eigene Gruppe beim
   Anlegen von Listen, Kachel auf der Hof-Übersicht. Gleiche Markierung (`bluehflaeche`) wie in der App;
   das Modul legt sie selbst an, falls sie fehlt.
+- **Aufzeichnungen** (`/aufzeichnungen`, Knöpfe auf der Hof-Übersicht): Pflanzenschutz-Aufzeichnung und
+  Düngeaufzeichnung je Jahr, druckbar (A4 quer, als PDF speicherbar) und als CSV für Excel. Pflichtangaben,
+  die fehlen, sind rot markiert. Die App (ab 1.11) speichert die Angaben maschinenlesbar im Log-Feld `data`.
 - **Fotos** (`/fotos`) fest eingebaut.
 - **Einfache Begriffe** wie in der App (Tier, Feld, Maschine, Arbeit, Ausbringung …).
 - **Gestaltung**: runder, luftiger, grünes Richterhof-Logo, Dunkelmodus wird unterstützt.

@@ -19,3 +19,10 @@ richterhofos.listen:
   parent: farm.base
   menu_name: admin
   weight: 6
+richterhofos.aufzeichnungen:
+  title: 'Aufzeichnungen'
+  description: 'Pflanzenschutz- und Düngeaufzeichnung für ein Jahr'
+  route_name: richterhofos.aufzeichnungen
+  parent: farm.base
+  menu_name: admin
+  weight: 8

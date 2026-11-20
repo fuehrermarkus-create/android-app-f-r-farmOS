@@ -34,6 +34,13 @@
     {% endif %}
   </section>
 
+  {% if links.psm or links.duengung %}
+    <nav class="rh-aufz" aria-label="Aufzeichnungen">
+      {% if links.psm %}<a class="rh-aufz__knopf" href="{{ links.psm }}?jahr={{ links.jahr }}"><span>Pflanzenschutz-Aufzeichnung {{ links.jahr }}</span><small>Ausgabe für ein Jahr · drucken oder CSV</small></a>{% endif %}
+      {% if links.duengung %}<a class="rh-aufz__knopf rh-aufz__knopf--duengung" href="{{ links.duengung }}?jahr={{ links.jahr }}"><span>Düngeaufzeichnung {{ links.jahr }}</span><small>je Feld mit Stickstoff · drucken oder CSV</small></a>{% endif %}
+    </nav>
+  {% endif %}
+
   <div class="rh-raster">
 
     <section class="rh-karte rh-karte--arbeiten">

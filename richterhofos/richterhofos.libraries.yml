@@ -19,3 +19,15 @@ listen:
   dependencies:
     - core/drupal
     - core/once
+aufzeichnungen:
+  version: 1.0.0
+  css:
+    theme:
+      css/start.css: {}
+      css/listen.css: {}
+      css/aufzeichnungen.css: {}
+  js:
+    js/listen.js: {}
+  dependencies:
+    - core/drupal
+    - core/once

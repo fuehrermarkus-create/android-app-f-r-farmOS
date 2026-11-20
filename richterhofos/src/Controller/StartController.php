@@ -36,6 +36,9 @@ class StartController extends ControllerBase {
         'eintraege' => $this->url('/logs'),
         'listen' => $this->url('/listen'),
         'kulturen' => $this->url('/kulturen'),
+        'psm' => $this->url('/aufzeichnungen/pflanzenschutz'),
+        'duengung' => $this->url('/aufzeichnungen/duengung'),
+        'jahr' => date('Y'),
       ],
       '#attached' => ['library' => ['richterhofos/start']],
       '#cache' => [
