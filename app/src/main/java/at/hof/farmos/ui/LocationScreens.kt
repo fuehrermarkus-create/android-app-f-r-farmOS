@@ -188,6 +188,19 @@ fun LocationDetailScreen(
 
         LazyColumn(Modifier.padding(pad).fillMaxSize()) {
             item {
+                Text("Erfassen", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(start = 16.dp, top = 8.dp))
+                FlowRow(
+                    Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    actions.forEach { a ->
+                        AssistChip(onClick = a.onClick, label = { Text(a.label) },
+                            leadingIcon = { Icon(a.icon, null) })
+                    }
+                }
+            }
+            item {
                 Card(Modifier.fillMaxWidth().padding(12.dp)) {
                     Column(Modifier.padding(16.dp)) {
                         InfoRow("Art", kindLabel(l.kind))
@@ -198,6 +211,22 @@ fun LocationDetailScreen(
                         InfoRow("Notizen", l.notes)
                     }
                 }
+            }
+            if (isLand) item {
+                Text("Kulturen auf dieser Fläche", style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
+                if (crops.isEmpty()) {
+                    Text("Keine – über „Aussaat“ erfassen.", color = MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp))
+                }
+            }
+            items(crops, key = { "crop-" + it.id }) { c ->
+                ListItem(
+                    modifier = Modifier.clickable { onOpen(c.id) },
+                    headlineContent = { Text(c.name) },
+                    supportingContent = { c.subtype?.let { Text(it) } },
+                    leadingContent = { Icon(Icons.Default.Grass, null) },
+                )
             }
             item {
                 PositionCard(vm, l, crops.map { it.subtype ?: it.name }.distinct())
@@ -224,35 +253,6 @@ fun LocationDetailScreen(
                                 color = MaterialTheme.colorScheme.error,
                             )
                         }
-                    }
-                }
-            }
-            if (isLand) item {
-                Text("Kulturen auf dieser Fläche", style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
-                if (crops.isEmpty()) {
-                    Text("Keine – über „Aussaat“ erfassen.", color = MaterialTheme.colorScheme.outline,
-                        style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 16.dp))
-                }
-            }
-            items(crops, key = { "crop-" + it.id }) { c ->
-                ListItem(
-                    modifier = Modifier.clickable { onOpen(c.id) },
-                    headlineContent = { Text(c.name) },
-                    supportingContent = { c.subtype?.let { Text(it) } },
-                    leadingContent = { Icon(Icons.Default.Grass, null) },
-                )
-            }
-            item {
-                Text("Erfassen", style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.padding(start = 16.dp, top = 12.dp))
-                FlowRow(
-                    Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    actions.forEach { a ->
-                        AssistChip(onClick = a.onClick, label = { Text(a.label) },
-                            leadingIcon = { Icon(a.icon, null) })
                     }
                 }
             }
