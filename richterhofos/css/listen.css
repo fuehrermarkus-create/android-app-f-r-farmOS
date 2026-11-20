@@ -52,3 +52,11 @@
 @media print {
   .rh-chips, .rh-hinweis, #gin_sidebar, .gin-secondary-toolbar, .toolbar, .region-breadcrumb { display: none !important; }
 }
+
+/* Blühflächen */
+.rh-blueh { display: inline-block; padding: .15rem .6rem; border-radius: 999px; font-size: .82rem; font-weight: 600; text-decoration: none !important; white-space: nowrap; }
+.rh-blueh.is-an { background: #fff4cc; color: #8a6400 !important; }
+.rh-blueh.is-aus { color: #66736a !important; border: 1px dashed #cfd8d1; }
+.rh-blueh.is-aus:hover { border-style: solid; color: #2f6b3a !important; }
+.rh-chip--blueh.is-aktiv { background: #d9a400; border-color: #d9a400; }
+@media print { .rh-blueh.is-aus { display: none; } }

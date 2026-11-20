@@ -15,6 +15,7 @@ use Drupal\views\Views;
  */
 function richterhofos_install(): void {
   richterhofos_fotoseite_einrichten();
+  \Drupal\richterhofos\Hof::bluehflaecheAnlegen();
 
   // Hof-Übersicht als Startseite.
   \Drupal::configFactory()->getEditable('system.site')
@@ -89,4 +90,12 @@ function richterhofos_fotoseite_einrichten(): void {
 function richterhofos_update_10001(): string {
   richterhofos_fotoseite_einrichten();
   return 'Fotoseite aktualisiert.';
+}
+
+/**
+ * Markierung „Blühfläche“ anlegen, falls sie fehlt.
+ */
+function richterhofos_update_10002(): string {
+  \Drupal\richterhofos\Hof::bluehflaecheAnlegen();
+  return 'Markierung Blühfläche vorhanden.';
 }

@@ -50,3 +50,15 @@ richterhofos.kulturen:
     _title: 'Was wächst wo'
   requirements:
     _user_is_logged_in: 'TRUE'
+richterhofos.bluehflaeche:
+  path: '/kulturen/bluehflaeche/{asset}'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\ListenController::bluehflaecheUmschalten'
+  requirements:
+    _entity_access: 'asset.update'
+    _csrf_token: 'TRUE'
+    asset: '\d+'
+  options:
+    parameters:
+      asset:
+        type: entity:asset

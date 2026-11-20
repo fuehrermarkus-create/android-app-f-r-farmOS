@@ -20,6 +20,7 @@ final class Hof {
 
   const LISTE = 'Liste: ';
   const ARCHIV = 'Archiv: ';
+  const BLUEH = 'bluehflaeche';
 
   /**
    * Arbeiten für Listen (gleiche Schlüssel wie in der App).
@@ -107,6 +108,61 @@ final class Hof {
       }
     }
     return $ergebnis;
+  }
+
+  /**
+   * Markierung „Blühfläche“ in farmOS anlegen, falls sie fehlt (wie in der App).
+   */
+  public static function bluehflaecheAnlegen(): void {
+    if (!self::etm()->hasDefinition('flag')) {
+      return;
+    }
+    $speicher = self::etm()->getStorage('flag');
+    if (!$speicher->load(self::BLUEH)) {
+      $speicher->create([
+        'id' => self::BLUEH,
+        'label' => 'Blühfläche',
+        'entity_types' => ['asset' => ['land', 'plant']],
+      ])->save();
+    }
+  }
+
+  public static function istBluehflaeche(EntityInterface $ding): bool {
+    if (!$ding->hasField('flag')) {
+      return FALSE;
+    }
+    foreach ($ding->get('flag') as $eintrag) {
+      if ($eintrag->value === self::BLUEH) {
+        return TRUE;
+      }
+    }
+    return FALSE;
+  }
+
+  public static function setzeBluehflaeche(EntityInterface $ding, bool $an): void {
+    $werte = [];
+    foreach ($ding->get('flag') as $eintrag) {
+      if ($eintrag->value !== self::BLUEH) {
+        $werte[] = $eintrag->value;
+      }
+    }
+    if ($an) {
+      $werte[] = self::BLUEH;
+    }
+    $ding->set('flag', $werte);
+    $ding->save();
+  }
+
+  /**
+   * IDs aller aktiven Felder mit Markierung „Blühfläche“.
+   */
+  public static function bluehflaechen(): array {
+    try {
+      return array_map('strval', array_values(self::aktiveDinge('land')->condition('flag', self::BLUEH)->execute()));
+    }
+    catch (\Throwable $e) {
+      return [];
+    }
   }
 
   /**

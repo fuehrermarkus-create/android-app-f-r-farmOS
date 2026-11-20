@@ -61,24 +61,29 @@ class ListeForm extends FormBase {
 
     // Felder nach aktueller Frucht gruppieren.
     $kulturen = Hof::kulturenJeFeld();
+    // Blühflächen bilden eine eigene Gruppe (z. B. zum Mulchen).
+    $blueh = array_flip(Hof::bluehflaechen());
     $gruppen = [];
     foreach (Hof::felder() as $id => $feld) {
       $arten = array_unique(array_column($kulturen[$id] ?? [], 'art'));
-      $gruppe = $arten ? implode(', ', $arten) : 'Ohne Kultur';
-      $gruppen[$gruppe][$id] = $feld->label();
-    }
-    uksort($gruppen, function ($a, $b) {
-      if ($a === 'Ohne Kultur' || $b === 'Ohne Kultur') {
-        return $a === 'Ohne Kultur' ? 1 : -1;
+      if (isset($blueh[(string) $id])) {
+        $gruppe = '🌼 Blühflächen';
+        $label = $feld->label() . ($arten ? ' (' . implode(', ', $arten) . ')' : '');
       }
-      return strnatcasecmp($a, $b);
-    });
+      else {
+        $gruppe = $arten ? implode(', ', $arten) : 'Ohne Kultur';
+        $label = $feld->label();
+      }
+      $gruppen[$gruppe][$id] = $label;
+    }
+    $rang = fn($g) => $g === 'Ohne Kultur' ? 2 : ($g === '🌼 Blühflächen' ? 1 : 0);
+    uksort($gruppen, fn($a, $b) => [$rang($a), $a] <=> [$rang($b), $b]);
 
     $form['felder'] = [
       '#type' => 'container',
       '#tree' => TRUE,
       '#attributes' => ['class' => ['rh-feldgruppen']],
-      'titel' => ['#markup' => '<h3 class="rh-abschnitt">Felder auswählen</h3><p class="rh-hinweis">Nach der Frucht gruppiert, die gerade darauf steht. „Alle“ wählt die ganze Gruppe.</p>'],
+      'titel' => ['#markup' => '<h3 class="rh-abschnitt">Felder auswählen</h3><p class="rh-hinweis">Nach der Frucht gruppiert, die gerade darauf steht; Blühflächen haben eine eigene Gruppe. „Alle“ wählt die ganze Gruppe.</p>'],
     ];
     $n = 0;
     foreach ($gruppen as $gruppe => $felder) {

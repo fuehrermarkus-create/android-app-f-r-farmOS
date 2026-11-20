@@ -97,6 +97,7 @@ class ListenController extends ControllerBase {
       }
     }
     ksort($je_art, SORT_NATURAL | SORT_FLAG_CASE);
+    $blueh = array_flip(Hof::bluehflaechen());
 
     $chips = [
       '#type' => 'inline_template',
@@ -104,22 +105,30 @@ class ListenController extends ControllerBase {
         . '<a class="rh-chip{{ filter == \'\' ? \' is-aktiv\' }}" href="?">Alle <b>{{ alle }}</b></a>'
         . '{% for art, n in arten %}<a class="rh-chip{{ filter == art ? \' is-aktiv\' }}" href="?kultur={{ art|url_encode }}">{{ art }} <b>{{ n }}</b></a>{% endfor %}'
         . '{% if leer %}<a class="rh-chip{{ filter == \'-\' ? \' is-aktiv\' }}" href="?kultur=-">ohne Kultur <b>{{ leer }}</b></a>{% endif %}'
+        . '{% if blueh %}<a class="rh-chip rh-chip--blueh{{ filter == \'bluehflaeche\' ? \' is-aktiv\' }}" href="?kultur=bluehflaeche">🌼 Blühflächen <b>{{ blueh }}</b></a>{% endif %}'
         . '<button type="button" class="rh-chip rh-drucken">Drucken</button></nav>',
-      '#context' => ['filter' => $filter, 'alle' => count($felder), 'arten' => $je_art, 'leer' => $leer],
+      '#context' => ['filter' => $filter, 'alle' => count($felder), 'arten' => $je_art, 'leer' => $leer, 'blueh' => count(array_intersect_key($blueh, $felder))],
     ];
 
     $zeilen = [];
     foreach ($felder as $id => $feld) {
       $hier = $kulturen[$id] ?? [];
       $arten = array_unique(array_column($hier, 'art'));
+      $ist_blueh = isset($blueh[(string) $id]);
       if ($filter === '-' && $hier) {
         continue;
       }
-      if ($filter !== '' && $filter !== '-' && !in_array($filter, $arten, TRUE)) {
+      if ($filter === 'bluehflaeche') {
+        if (!$ist_blueh) {
+          continue;
+        }
+      }
+      elseif ($filter !== '' && $filter !== '-' && !in_array($filter, $arten, TRUE)) {
         continue;
       }
       $url = Hof::link($feld);
       $feldzelle = $url ? Link::fromTextAndUrl($feld->label(), Url::fromUserInput($url)) : $feld->label();
+      $schalter = $this->bluehSchalter($feld, $ist_blueh, $filter);
       if ($hier) {
         $namen = [];
         $seit = [];
@@ -136,6 +145,7 @@ class ListenController extends ControllerBase {
           ['data' => ['#markup' => '<span class="rh-marke">' . Html::escape(implode(', ', $arten)) . '</span>']],
           ['data' => ['#markup' => implode('<br>', $namen)]],
           implode(', ', array_unique($seit)),
+          ['data' => $schalter],
         ];
       }
       else {
@@ -144,23 +154,53 @@ class ListenController extends ControllerBase {
           ['data' => ['#markup' => '<span class="rh-leer">–</span>']],
           '',
           '',
+          ['data' => $schalter],
         ];
       }
     }
 
     return [
       '#attached' => ['library' => ['richterhofos/listen']],
-      '#cache' => ['tags' => ['asset_list', 'log_list'], 'contexts' => ['url.query_args:kultur', 'user']],
+      '#cache' => ['tags' => ['asset_list', 'log_list', 'config:flag_list'], 'contexts' => ['url.query_args:kultur', 'user']],
       'hinweis' => ['#markup' => '<p class="rh-hinweis">Kulturen entstehen in der App bei „Aussaat“. Geerntete oder beendete Kulturen in farmOS archivieren, dann verschwinden sie hier.</p>'],
       'chips' => $chips,
       'tabelle' => [
         '#type' => 'table',
-        '#header' => ['Feld', 'Frucht', 'Kultur', 'Seit'],
+        '#header' => ['Feld', 'Frucht', 'Kultur', 'Seit', 'Blühfläche'],
         '#rows' => $zeilen,
         '#empty' => 'Keine Felder gefunden.',
         '#attributes' => ['class' => ['rh-tabelle']],
       ],
     ];
+  }
+
+  /**
+   * Knopf in der Spalte „Blühfläche“: zeigt den Stand und schaltet ihn um.
+   */
+  protected function bluehSchalter($feld, bool $an, string $filter): array {
+    $url = Url::fromRoute('richterhofos.bluehflaeche', ['asset' => $feld->id()], ['query' => ['kultur' => $filter]]);
+    if (!$url->access()) {
+      return ['#markup' => $an ? '🌼' : ''];
+    }
+    return Link::fromTextAndUrl($an ? '🌼 ja' : '+ markieren', $url)->toRenderable() + [
+      '#attributes' => [
+        'class' => ['rh-blueh', $an ? 'is-an' : 'is-aus'],
+        'title' => $an ? 'Markierung Blühfläche entfernen' : 'Als Blühfläche markieren',
+      ],
+    ];
+  }
+
+  /**
+   * Markierung „Blühfläche“ eines Felds umschalten und zurück zur Liste.
+   */
+  public function bluehflaecheUmschalten(\Drupal\Core\Entity\EntityInterface $asset) {
+    Hof::bluehflaecheAnlegen();
+    $an = !Hof::istBluehflaeche($asset);
+    Hof::setzeBluehflaeche($asset, $an);
+    $this->messenger()->addStatus($asset->label() . ($an ? ' ist jetzt als Blühfläche markiert.' : ' ist keine Blühfläche mehr.'));
+    $kultur = (string) \Drupal::request()->query->get('kultur', '');
+    $ziel = Url::fromRoute('richterhofos.kulturen', [], $kultur !== '' ? ['query' => ['kultur' => $kultur]] : []);
+    return new \Symfony\Component\HttpFoundation\RedirectResponse($ziel->toString());
   }
 
 }

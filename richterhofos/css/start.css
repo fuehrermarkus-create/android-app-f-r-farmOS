@@ -80,3 +80,4 @@
 /* Dunkelmodus von Gin */
 .gin--dark-mode .rh-start { --rh-text: #e8ece9; --rh-grau: #a7b2aa; --rh-linie: #2e3631; --rh-karte: #1d2420; --rh-gruen-hell: #23382a; --rh-gruen: #7fc28c; }
 .gin--dark-mode .rh-knopf--haupt { background: #3f8a4c; }
+.rh-zahl--blueh::before { background: #d9a400; }

@@ -68,6 +68,17 @@ class StartController extends ControllerBase {
         'url' => $this->url('/assets/' . $typ),
       ];
     }
+    // Blühflächen (Markierung, wie in der App).
+    $blueh = Hof::bluehflaechen();
+    if ($blueh) {
+      $url = Url::fromRoute('richterhofos.kulturen', [], ['query' => ['kultur' => Hof::BLUEH]]);
+      $zahlen[] = [
+        'titel' => 'Blühflächen',
+        'anzahl' => count($blueh),
+        'typ' => 'blueh',
+        'url' => $url->access() ? $url->toString() : NULL,
+      ];
+    }
     return $zahlen;
   }
 

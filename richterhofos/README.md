@@ -9,6 +9,9 @@ Zusatzmodul für farmOS 4 (läuft auch mit 3.5): einfache, moderne Oberfläche f
 - **Listen** (`/listen`): Listen anlegen, Felder auswählen (nach aktueller Frucht gruppiert, „Alle“ je Gruppe),
   abhaken, ändern, abschließen. Gespeichert wie in der App – beide sehen dieselben Listen.
 - **Was wächst wo** (`/kulturen`): jedes Feld mit der Frucht, die gerade darauf steht, Filter je Frucht, druckbar.
+- **Blühflächen**: 🌼-Spalte und Filter in „Was wächst wo“ (per Klick markieren/entfernen), eigene Gruppe beim
+  Anlegen von Listen, Kachel auf der Hof-Übersicht. Gleiche Markierung (`bluehflaeche`) wie in der App;
+  das Modul legt sie selbst an, falls sie fehlt.
 - **Fotos** (`/fotos`) fest eingebaut.
 - **Einfache Begriffe** wie in der App (Tier, Feld, Maschine, Arbeit, Ausbringung …).
 - **Gestaltung**: runder, luftiger, grünes Richterhof-Logo, Dunkelmodus wird unterstützt.
