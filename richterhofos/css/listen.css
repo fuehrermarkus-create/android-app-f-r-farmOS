@@ -1,0 +1,54 @@
+/* richterhofOS – Listen und Kulturen */
+.rh-kopfzeile { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between; margin-bottom: 1rem; }
+.rh-hinweis { color: #66736a; margin: 0 0 .75rem; }
+.rh-listenraster { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.rh-listenkarte {
+  display: flex; flex-direction: column; gap: .45rem; padding: 1.1rem 1.2rem; border-radius: 16px;
+  background: #fff; border: 1px solid #e3e8e4; text-decoration: none !important; color: #1f2a22 !important;
+  transition: transform .12s, box-shadow .12s;
+}
+.rh-listenkarte:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,.07); }
+.rh-listenkarte__titel { font-size: 1.1rem; font-weight: 700; }
+.rh-listenkarte .rh-marke { align-self: flex-start; }
+.rh-listenkarte__zahl, .rh-listenkopf__zahl { color: #66736a; font-size: .9rem; }
+.rh-listenkopf { display: grid; gap: .4rem; max-width: 520px; margin-bottom: 1rem; }
+.rh-listenkopf .rh-marke { justify-self: start; }
+.rh-marke { font-size: .78rem; font-weight: 600; padding: .15rem .55rem; border-radius: 999px; background: #e7f1e8; color: #2f6b3a; }
+.rh-balken { display: block; height: 8px; border-radius: 999px; background: #e3e8e4; overflow: hidden; }
+.rh-balken span { display: block; height: 100%; background: #2f6b3a; border-radius: 999px; }
+.rh-leer { color: #66736a; }
+
+/* Formular */
+.rh-abschnitt { margin: 1.5rem 0 .25rem; }
+.rh-auswahlknoepfe { display: flex; flex-wrap: wrap; gap: .5rem; }
+.rh-auswahlknoepfe .form-item { margin: 0; }
+.rh-auswahlknoepfe .form-item label { padding: .45rem .9rem; border: 1px solid #cfd8d1; border-radius: 999px; cursor: pointer; }
+.rh-auswahlknoepfe input:checked + label { background: #2f6b3a; border-color: #2f6b3a; color: #fff; }
+.rh-auswahlknoepfe input[type=radio] { position: absolute; opacity: 0; }
+.rh-gruppe { border-radius: 14px; margin: .6rem 0; }
+.rh-gruppe summary { display: flex; align-items: center; gap: .75rem; font-weight: 700; }
+.rh-gruppe .form-checkboxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: .1rem .75rem; }
+.rh-alle { margin-left: auto; font-size: .8rem; font-weight: 600; padding: .2rem .7rem; border-radius: 999px; border: 1px solid #2f6b3a; background: #fff; color: #2f6b3a; cursor: pointer; }
+
+/* Abhaken */
+.rh-abhaken input[type=checkbox] { width: 1.4rem; height: 1.4rem; }
+.rh-abhaken tr.is-erledigt td { color: #66736a; }
+.rh-abhaken tr.is-erledigt a { text-decoration: line-through; }
+.rh-zurueck { margin-top: 1.5rem; }
+
+/* Kulturen */
+.rh-chips { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 0 1rem; }
+.rh-chip { display: inline-flex; gap: .35rem; align-items: center; padding: .4rem .85rem; border-radius: 999px; border: 1px solid #cfd8d1; background: #fff; color: #1f2a22 !important; text-decoration: none !important; font-size: .9rem; cursor: pointer; }
+.rh-chip b { color: #66736a; font-weight: 600; }
+.rh-chip.is-aktiv { background: #2f6b3a; border-color: #2f6b3a; color: #fff !important; }
+.rh-chip.is-aktiv b { color: #d6ead9; }
+.rh-drucken { margin-left: auto; }
+.rh-tabelle td.rh-feld { font-weight: 600; }
+
+/* Dunkelmodus */
+.gin--dark-mode .rh-listenkarte, .gin--dark-mode .rh-chip, .gin--dark-mode .rh-alle { background: #1d2420; border-color: #2e3631; color: #e8ece9 !important; }
+.gin--dark-mode .rh-balken { background: #2e3631; }
+
+@media print {
+  .rh-chips, .rh-hinweis, #gin_sidebar, .gin-secondary-toolbar, .toolbar, .region-breadcrumb { display: none !important; }
+}

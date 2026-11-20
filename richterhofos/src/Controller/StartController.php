@@ -9,16 +9,12 @@ use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Entity\Query\QueryInterface;
 use Drupal\Core\Url;
 use Drupal\image\Entity\ImageStyle;
+use Drupal\richterhofos\Hof;
 
 /**
  * Hof-Übersicht (/hof): Zahlen, letzte Arbeiten, offene Listen und Fotos.
  */
 class StartController extends ControllerBase {
-
-  /**
-   * Präfix der Listen-Kategorien, wie sie die App anlegt.
-   */
-  const LISTE = 'Liste: ';
 
   public function start(): array {
     $etm = $this->entityTypeManager();
@@ -38,6 +34,8 @@ class StartController extends ControllerBase {
       '#links' => [
         'fotos' => $this->url('/fotos'),
         'eintraege' => $this->url('/logs'),
+        'listen' => $this->url('/listen'),
+        'kulturen' => $this->url('/kulturen'),
       ],
       '#attached' => ['library' => ['richterhofos/start']],
       '#cache' => [
@@ -94,6 +92,7 @@ class StartController extends ControllerBase {
   protected function aktionen(): array {
     $aktionen = [];
     $ziele = [
+      ['Neue Liste', '/listen/neu', 'log', 'activity'],
       ['Neue Arbeit', '/log/add/activity', 'log', 'activity'],
       ['Neue Beobachtung', '/log/add/observation', 'log', 'observation'],
       ['Neues Tier', '/asset/add/animal', 'asset', 'animal'],
@@ -145,37 +144,23 @@ class StartController extends ControllerBase {
   }
 
   /**
-   * Listen aus der App („Liste: …“) mit Fortschritt.
+   * Listen (aus App und Web) mit Fortschritt – offene zuerst.
    */
   protected function listen(): array {
-    $terme = $this->entityTypeManager()->getStorage('taxonomy_term');
-    $tids = $terme->getQuery()->accessCheck(TRUE)
-      ->condition('vid', 'log_category')
-      ->condition('name', self::LISTE, 'STARTS_WITH')
-      ->sort('tid', 'DESC')
-      ->execute();
-    if (!$tids) {
-      return [];
-    }
-    $logs = $this->entityTypeManager()->getStorage('log');
     $listen = [];
-    foreach ($terme->loadMultiple($tids) as $term) {
-      $gesamt = (int) $logs->getQuery()->accessCheck(TRUE)
-        ->condition('category', $term->id())->count()->execute();
-      $offen = (int) $logs->getQuery()->accessCheck(TRUE)
-        ->condition('category', $term->id())
-        ->condition('status', 'pending')->count()->execute();
-      $fertig = $gesamt - $offen;
+    foreach (Hof::listen() as $term) {
+      $eintraege = Hof::listenEintraege($term);
+      $gesamt = count($eintraege);
+      $fertig = count(array_filter($eintraege, fn($l) => $l->get('status')->value !== 'pending'));
       $listen[] = [
-        'titel' => trim(substr($term->label(), strlen(self::LISTE))),
+        'titel' => Hof::listenInfo($term)['name'],
         'gesamt' => $gesamt,
         'fertig' => $fertig,
-        'offen' => $offen,
+        'offen' => $gesamt - $fertig,
         'prozent' => $gesamt ? (int) round($fertig * 100 / $gesamt) : 0,
-        'url' => $this->listenUrl((int) $term->id()),
+        'url' => Url::fromRoute('richterhofos.liste', ['taxonomy_term' => $term->id()])->toString(),
       ];
     }
-    // Offene Listen zuerst, dann die neuesten.
     usort($listen, fn($a, $b) => ($b['offen'] > 0) <=> ($a['offen'] > 0));
     return array_slice($listen, 0, 6);
   }
@@ -225,16 +210,6 @@ class StartController extends ControllerBase {
     return $lang
       ? $tageLang[$w] . ', ' . date('j.n.Y', $ts)
       : $tage[$w] . ' ' . date('j.n.', $ts) . (date('Y', $ts) !== date('Y') ? date('Y', $ts) : '');
-  }
-
-  protected function listenUrl(int $tid): ?string {
-    try {
-      $url = Url::fromUserInput('/logs', ['query' => ['category_target_id' => [$tid]]]);
-      return $url->access() ? $url->toString() : NULL;
-    }
-    catch (\Throwable $e) {
-      return NULL;
-    }
   }
 
   protected function url(string $pfad): ?string {

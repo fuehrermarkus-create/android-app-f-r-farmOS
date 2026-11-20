@@ -18,7 +18,7 @@ function richterhofos_sichtbare_dinge(): array {
   return [
     'animal' => ['Tiere', 1],
     'land' => ['Felder', 2],
-    'equipment' => ['Maschinen', 3],
+    'equipment' => ['Maschinen', 4],
   ];
 }
 
@@ -94,7 +94,7 @@ function richterhofos_menu_links_discovered_alter(array &$links): void {
     if ($id === 'views_view:views.farm_log.page') {
       $link['title'] = 'Einträge';
       $link['parent'] = 'farm.base';
-      $link['weight'] = 5;
+      $link['weight'] = 7;
       continue;
     }
 

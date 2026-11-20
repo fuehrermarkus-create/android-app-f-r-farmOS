@@ -5,3 +5,17 @@ richterhofos.start:
   parent: farm.base
   menu_name: admin
   weight: -100
+richterhofos.kulturen:
+  title: 'Kulturen'
+  description: 'Welche Frucht auf welchem Feld steht'
+  route_name: richterhofos.kulturen
+  parent: farm.base
+  menu_name: admin
+  weight: 3
+richterhofos.listen:
+  title: 'Listen'
+  description: 'Feldlisten, z. B. Silo erster Schnitt'
+  route_name: richterhofos.listen
+  parent: farm.base
+  menu_name: admin
+  weight: 6

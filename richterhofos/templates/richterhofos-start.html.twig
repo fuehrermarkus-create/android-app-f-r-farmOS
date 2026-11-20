@@ -26,6 +26,12 @@
         <span class="rh-zahl__titel">{{ z.titel }}</span>
       </a>
     {% endfor %}
+    {% if links.kulturen %}
+      <a class="rh-zahl rh-zahl--kultur" href="{{ links.kulturen }}">
+        <span class="rh-zahl__wert">🌱</span>
+        <span class="rh-zahl__titel">Was wächst wo</span>
+      </a>
+    {% endif %}
   </section>
 
   <div class="rh-raster">
@@ -56,6 +62,7 @@
     <section class="rh-karte rh-karte--listen">
       <div class="rh-karte__kopf">
         <h3>Listen</h3>
+        {% if links.listen %}<a href="{{ links.listen }}">Alle Listen</a>{% endif %}
       </div>
       {% if listen %}
         <ul class="rh-liste">
@@ -73,7 +80,7 @@
           {% endfor %}
         </ul>
       {% else %}
-        <p class="rh-leer">Keine Listen. Listen legst du in der App unter „Listen“ an.</p>
+        <p class="rh-leer">Keine Listen. Lege eine an mit „+ Neue Liste“ – hier oder in der App.</p>
       {% endif %}
     </section>
 

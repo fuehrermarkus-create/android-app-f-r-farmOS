@@ -3,10 +3,11 @@ type: module
 description: 'Richterhof: einfache Oberfläche für Tiere, Felder und Maschinen, Hof-Startseite und Fotos.'
 package: richterhofOS
 core_version_requirement: ^10.3 || ^11
-version: '1.0.0'
+version: '1.1.0'
 dependencies:
   - drupal:views
   - drupal:image
   - drupal:taxonomy
   - farm:asset
   - farm:log
+  - farm:farm_location

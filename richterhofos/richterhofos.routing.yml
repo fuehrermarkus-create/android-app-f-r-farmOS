@@ -5,3 +5,48 @@ richterhofos.start:
     _title: 'Richterhof'
   requirements:
     _user_is_logged_in: 'TRUE'
+richterhofos.listen:
+  path: '/listen'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\ListenController::uebersicht'
+    _title: 'Listen'
+  requirements:
+    _user_is_logged_in: 'TRUE'
+richterhofos.liste_neu:
+  path: '/listen/neu'
+  defaults:
+    _form: '\Drupal\richterhofos\Form\ListeForm'
+    _title: 'Neue Liste'
+  requirements:
+    _permission: 'create terms in log_category'
+richterhofos.liste:
+  path: '/listen/{taxonomy_term}'
+  defaults:
+    _form: '\Drupal\richterhofos\Form\ListeDetailForm'
+    _title_callback: '\Drupal\richterhofos\Controller\ListenController::titel'
+  requirements:
+    _user_is_logged_in: 'TRUE'
+    taxonomy_term: '\d+'
+  options:
+    parameters:
+      taxonomy_term:
+        type: entity:taxonomy_term
+richterhofos.liste_bearbeiten:
+  path: '/listen/{taxonomy_term}/bearbeiten'
+  defaults:
+    _form: '\Drupal\richterhofos\Form\ListeForm'
+    _title: 'Liste bearbeiten'
+  requirements:
+    _permission: 'create terms in log_category'
+    taxonomy_term: '\d+'
+  options:
+    parameters:
+      taxonomy_term:
+        type: entity:taxonomy_term
+richterhofos.kulturen:
+  path: '/kulturen'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\ListenController::kulturen'
+    _title: 'Was wächst wo'
+  requirements:
+    _user_is_logged_in: 'TRUE'
