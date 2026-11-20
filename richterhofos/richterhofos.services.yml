@@ -1,0 +1,6 @@
+services:
+  richterhofos.anmelden_umleiten:
+    class: Drupal\richterhofos\EventSubscriber\AnmeldenUmleiten
+    arguments: ['@current_user', '@current_route_match']
+    tags:
+      - { name: event_subscriber }
