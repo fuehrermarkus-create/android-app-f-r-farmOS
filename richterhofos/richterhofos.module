@@ -156,3 +156,26 @@ function richterhofos_theme(): array {
     ],
   ];
 }
+
+/**
+ * Implements hook_entity_create_access().
+ *
+ * Korrektur für farmOS 4: Beim Foto-Upload über die API (/api/log/{art}/image)
+ * prüft Drupal das allgemeine Recht „create log“ ohne Art. Die farmOS-Rollen
+ * vergeben aber nur Rechte je Art („create observation log“ …), deshalb wurde
+ * der Upload für Manager mit HTTP 403 abgelehnt. Wer mindestens eine Art von
+ * Eintrag bzw. Ding anlegen darf, darf damit auch die Datei hochladen.
+ */
+function richterhofos_entity_create_access(\Drupal\Core\Session\AccountInterface $account, array $context, $entity_bundle): \Drupal\Core\Access\AccessResultInterface {
+  $typ = $context['entity_type_id'] ?? NULL;
+  if ($entity_bundle !== NULL || !in_array($typ, ['log', 'asset'], TRUE)) {
+    return \Drupal\Core\Access\AccessResult::neutral();
+  }
+  $handler = \Drupal::entityTypeManager()->getAccessControlHandler($typ);
+  foreach (array_keys(\Drupal::service('entity_type.bundle.info')->getBundleInfo($typ)) as $bundle) {
+    if ($handler->createAccess((string) $bundle, $account)) {
+      return \Drupal\Core\Access\AccessResult::allowed()->cachePerPermissions()->cachePerUser();
+    }
+  }
+  return \Drupal\Core\Access\AccessResult::neutral()->cachePerPermissions();
+}
