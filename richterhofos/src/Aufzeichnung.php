@@ -18,6 +18,7 @@ final class Aufzeichnung {
 
   const PSM = 'Pflanzenschutz';
   const DUENGUNG = 'Düngung';
+  const ERNTE = 'Ernte';
 
   /**
    * Alle erledigten Einträge einer Kategorie in einem Jahr, nach Zeit sortiert.
@@ -196,6 +197,10 @@ final class Aufzeichnung {
       'n_ha' => ($n_gesamt !== NULL && $flaeche) ? $n_gesamt / $flaeche : NULL,
       'technik' => $daten['technik'] ?? NULL,
       'einarbeitung' => $einarbeitung ? date('d.m.Y H:i', $einarbeitung) : NULL,
+      'erntegut' => $daten['erntegut'] ?? $mittel,
+      'schnitt' => $daten['schnitt'] ?? NULL,
+      't_gesamt' => $daten['t_gesamt'] ?? (($einheit === 't') ? $menge : NULL),
+      't_ha' => $daten['t_ha'] ?? NULL,
       'aus_app' => (bool) $daten,
     ];
   }

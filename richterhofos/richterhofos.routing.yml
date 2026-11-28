@@ -109,3 +109,16 @@ richterhofos.vorschlag:
   requirements:
     _user_is_logged_in: 'TRUE'
     vokabular: '[a-z_]+'
+richterhofos.ernte:
+  path: '/aufzeichnungen/ernte'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\AufzeichnungenController::ernte'
+    _title_callback: '\Drupal\richterhofos\Controller\AufzeichnungenController::ernteTitel'
+  requirements:
+    _user_is_logged_in: 'TRUE'
+richterhofos.ernte_csv:
+  path: '/aufzeichnungen/ernte/csv'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\AufzeichnungenController::ernteCsv'
+  requirements:
+    _user_is_logged_in: 'TRUE'

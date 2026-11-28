@@ -26,7 +26,12 @@ class FeldarbeitForm extends FormBase {
     'duengung' => ['Düngung', 'input', 'Düngung'],
     'pflanzenschutz' => ['Pflanzenschutz', 'input', 'Pflanzenschutz'],
     'aussaat' => ['Aussaat', 'seeding', 'Aussaat'],
+    'ernte' => ['Ernte', 'harvest', 'Ernte'],
   ];
+
+  /** Ernte-Einheiten => farmOS-Messart. */
+  const ERNTE_EINHEITEN = ['Fuhren' => 'count', 'Ballen' => 'count', 't' => 'weight', 'dt' => 'weight', 'kg' => 'weight', 'm³' => 'volume'];
+  const ERNTEGUT = ['Grassilage', 'Maissilage', 'Heu', 'Grummet', 'Stroh', 'Weizen', 'Gerste', 'Roggen', 'Triticale', 'Hafer', 'Körnermais', 'Raps', 'Soja', 'Kartoffeln'];
 
   const DUENGERARTEN = ['Gülle / Jauche', 'Mist / Kompost', 'Mineraldünger', 'Gärrest', 'Sonstiger organischer'];
   const TECHNIKEN = ['Schleppschlauch', 'Schleppschuh', 'Injektion / Schlitz', 'Breitverteiler', 'Düngerstreuer', 'Miststreuer'];
@@ -177,6 +182,69 @@ class FeldarbeitForm extends FormBase {
         '#default_value' => $alt['aussaat']['sorte'] ?? '',
       ],
       'menge' => $this->menge($alt['aussaat'] ?? [], ['kg' => 'kg', 'Körner/m²' => 'Körner/m²'], 'Saatmenge', NULL, TRUE),
+    ];
+
+    // ---- Ernte
+    $form['ernte'] = [
+      '#type' => 'fieldset',
+      '#title' => 'Ernte',
+      '#tree' => TRUE,
+      '#states' => $sichtbar('ernte'),
+      'erntegut' => [
+        '#type' => 'textfield',
+        '#title' => 'Was wurde geerntet?',
+        '#description' => 'z. B. Grassilage, Heu, Weizen, Körnermais',
+        '#attributes' => ['list' => 'rh-erntegut'],
+        '#default_value' => $alt['ernte']['erntegut'] ?? '',
+        '#suffix' => \Drupal\Core\Render\Markup::create('<datalist id="rh-erntegut">' . implode('', array_map(fn($g) => '<option value="' . htmlspecialchars($g) . '">', self::ERNTEGUT)) . '</datalist>'),
+      ],
+      'schnitt' => [
+        '#type' => 'select',
+        '#title' => 'Schnitt (Grünland)',
+        '#options' => ['1' => '1. Schnitt', '2' => '2. Schnitt', '3' => '3. Schnitt', '4' => '4. Schnitt', '5' => '5. Schnitt'],
+        '#empty_option' => '– kein Schnitt –',
+        '#default_value' => $alt['ernte']['schnitt'] ?? NULL,
+      ],
+      'einheit' => [
+        '#type' => 'radios',
+        '#title' => 'Gezählt in',
+        '#options' => array_combine(array_keys(self::ERNTE_EINHEITEN), array_keys(self::ERNTE_EINHEITEN)),
+        '#default_value' => $alt['ernte']['einheit'] ?? 'Fuhren',
+        '#attributes' => ['class' => ['rh-auswahlknoepfe']],
+        '#description' => 'Die Menge je Feld gibst du im nächsten Schritt ein, z. B. 3 Fuhren hier und 7 dort.',
+      ],
+      'je_einheit' => [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['rh-mengenzeile']],
+        '#states' => ['invisible' => [':input[name="ernte[einheit]"]' => [['value' => 't'], ['value' => 'dt'], ['value' => 'kg']]]],
+        'wert' => [
+          '#type' => 'number',
+          '#title' => 'Eine Fuhre / ein Ballen / ein m³ entspricht etwa',
+          '#step' => 'any',
+          '#min' => 0,
+          '#default_value' => $alt['ernte']['je_einheit']['wert'] ?? NULL,
+          '#description' => 'Optional. Damit rechnet richterhofOS Tonnen und t/ha aus.',
+        ],
+        'einheit' => [
+          '#type' => 'select',
+          '#title' => 'Einheit',
+          '#options' => ['t' => 't', 'dt' => 'dt', 'kg' => 'kg'],
+          '#default_value' => $alt['ernte']['je_einheit']['einheit'] ?? 't',
+        ],
+      ],
+      'feuchte' => [
+        '#type' => 'number',
+        '#title' => 'Feuchte bzw. TS-Gehalt in % (optional)',
+        '#step' => 'any',
+        '#min' => 0,
+        '#max' => 100,
+        '#default_value' => $alt['ernte']['feuchte'] ?? NULL,
+      ],
+      'beenden' => [
+        '#type' => 'checkbox',
+        '#title' => 'Kultur damit beenden (z. B. Getreide, Mais) – sie verschwindet aus „Was wächst wo“',
+        '#default_value' => $alt['ernte']['beenden'] ?? FALSE,
+      ],
     ];
 
     // ---- Maschinen
@@ -345,6 +413,11 @@ class FeldarbeitForm extends FormBase {
         $form_state->setErrorByName('pflanzenschutz][anwender', 'Bitte den Anwender angeben.');
       }
     }
+    elseif ($arbeit === 'ernte') {
+      if (trim((string) ($teil['erntegut'] ?? '')) === '') {
+        $form_state->setErrorByName('ernte][erntegut', 'Bitte angeben, was geerntet wurde.');
+      }
+    }
     elseif (trim((string) ($teil['frucht'] ?? '')) === '') {
       $form_state->setErrorByName('aussaat][frucht', 'Bitte die Frucht angeben.');
     }
@@ -401,25 +474,34 @@ class FeldarbeitForm extends FormBase {
     $was = match ($arbeit) {
       'duengung' => trim((string) $teil['duenger']) . ($teil['duengerart'] ? ' (' . $teil['duengerart'] . ')' : ''),
       'pflanzenschutz' => trim((string) $teil['mittel']) . ' · Zulassung ' . ($teil['zulassungsnummer'] ?: '–'),
+      'ernte' => trim((string) $teil['erntegut']) . ($teil['schnitt'] ? ' · ' . $teil['schnitt'] . '. Schnitt' : ''),
       default => trim((string) $teil['frucht']) . ($teil['sorte'] ? ' ' . trim((string) $teil['sorte']) : ''),
     };
-    $menge = $teil['menge'];
+    $menge = $teil['menge'] ?? [];
     $bezug = ($menge['bezug'] ?? 'ha') === 'gesamt' ? 'gesamt' : 'je ha';
     $form['kopf'] = [
       '#type' => 'inline_template',
       '#template' => '<div class="rh-kontrollkopf"><span class="rh-marke">{{ titel }}</span> <strong>{{ was }}</strong>'
         . '<p>{{ zeit }}{% if menge %} · {{ menge }}{% endif %}</p>'
-        . '<p class="rh-hinweis">Bitte prüfen. Die Fläche je Feld kannst du ändern, z. B. wenn nur ein Teil gedüngt wurde.</p></div>',
+        . '<p class="rh-hinweis">{{ hinweis }}</p></div>',
       '#context' => [
         'titel' => $titel,
         'was' => $was,
         'zeit' => date('d.m.Y, H:i', (int) $e['zeit']) . ' Uhr',
         'menge' => ($menge['wert'] ?? '') !== '' ? Aufzeichnung::z((float) $menge['wert']) . ' ' . $menge['einheit'] . ' ' . $bezug : '',
+        'hinweis' => $arbeit === 'ernte'
+          ? 'Trag je Feld die geerntete Menge ein und klick „Neu berechnen“. Felder ohne Menge werden nicht gespeichert.'
+          : 'Bitte prüfen. Die Fläche je Feld kannst du ändern, z. B. wenn nur ein Teil gedüngt wurde.',
       ],
     ];
 
     $kopf = ['Feld', 'Frucht', 'Fläche ha'];
-    if ($arbeit !== 'aussaat') {
+    if ($arbeit === 'ernte') {
+      $kopf[] = 'Menge (' . $teil['einheit'] . ')';
+      $kopf[] = 't gesamt';
+      $kopf[] = 't/ha';
+    }
+    elseif ($arbeit !== 'aussaat') {
       $kopf[] = 'Menge je ha';
       $kopf[] = 'Menge';
     }
@@ -433,7 +515,8 @@ class FeldarbeitForm extends FormBase {
       '#attributes' => ['class' => ['rh-tabelle', 'rh-kontrolle']],
     ];
     $flaechen = (array) ($form_state->get('flaechen') ?? []);
-    $rechnung = $this->rechnen($e, $felder, $flaechen);
+    $mengen = (array) ($form_state->get('mengen') ?? []);
+    $rechnung = $this->rechnen($e, $felder, $flaechen, $mengen);
     foreach ($felder as $id => $feld) {
       $r = $rechnung[$id];
       $zeile = [
@@ -449,7 +532,21 @@ class FeldarbeitForm extends FormBase {
           '#default_value' => $r['flaeche'] !== NULL ? round($r['flaeche'], 4) : NULL,
         ],
       ];
-      if ($arbeit !== 'aussaat') {
+      if ($arbeit === 'ernte') {
+        $zeile['menge'] = [
+          '#type' => 'number',
+          '#title' => 'Menge',
+          '#title_display' => 'invisible',
+          '#step' => 'any',
+          '#min' => 0,
+          '#size' => 7,
+          '#default_value' => $mengen[(string) $id] ?? NULL,
+          '#field_suffix' => $teil['einheit'],
+        ];
+        $zeile['t'] = ['#plain_text' => $r['t'] !== NULL ? Aufzeichnung::z($r['t'], 2) : '–'];
+        $zeile['t_ha'] = ['#plain_text' => $r['t_ha'] !== NULL ? Aufzeichnung::z($r['t_ha'], 2) : '–'];
+      }
+      elseif ($arbeit !== 'aussaat') {
         $einheit = $menge['einheit'];
         $zeile['je_ha'] = ['#plain_text' => $r['je_ha'] !== NULL ? Aufzeichnung::z($r['je_ha']) . ' ' . $einheit . '/ha' : '–'];
         $zeile['gesamt'] = ['#plain_text' => $r['gesamt'] !== NULL ? Aufzeichnung::z($r['gesamt']) . ' ' . $einheit : '–'];
@@ -463,7 +560,7 @@ class FeldarbeitForm extends FormBase {
     $form['aktionen'] = ['#type' => 'actions'];
     $form['aktionen']['speichern'] = [
       '#type' => 'submit',
-      '#value' => count($felder) . ' ' . (count($felder) === 1 ? 'Eintrag' : 'Einträge') . ' speichern',
+      '#value' => $arbeit === 'ernte' ? 'Ernte speichern' : count($felder) . ' ' . (count($felder) === 1 ? 'Eintrag' : 'Einträge') . ' speichern',
       '#button_type' => 'primary',
       '#submit' => ['::speichern'],
     ];
@@ -484,8 +581,11 @@ class FeldarbeitForm extends FormBase {
   /**
    * Menge je Feld ausrechnen (je ha oder Gesamtmenge nach Fläche aufteilen).
    */
-  protected function rechnen(array $e, array $felder, array $flaechen): array {
+  protected function rechnen(array $e, array $felder, array $flaechen, array $mengen = []): array {
     $arbeit = $e['arbeit'];
+    if ($arbeit === 'ernte') {
+      return $this->rechnenErnte($e['ernte'], $felder, $flaechen, $mengen);
+    }
     $menge = $e[$arbeit]['menge'] ?? [];
     $wert = ($menge['wert'] ?? '') === '' ? NULL : (float) $menge['wert'];
     $einheit = $menge['einheit'] ?? '';
@@ -516,6 +616,49 @@ class FeldarbeitForm extends FormBase {
     return $ergebnis;
   }
 
+  /**
+   * Ernte: Menge je Feld, umgerechnet in Tonnen und t/ha.
+   */
+  protected function rechnenErnte(array $teil, array $felder, array $flaechen, array $mengen): array {
+    $einheit = $teil['einheit'] ?? 't';
+    $faktor = ['t' => 1.0, 'dt' => 0.1, 'kg' => 0.001];
+    if (isset($faktor[$einheit])) {
+      $je_t = $faktor[$einheit];
+    }
+    else {
+      $w = $teil['je_einheit']['wert'] ?? '';
+      $je_t = ($w === '' || $w === NULL) ? NULL : (float) $w * ($faktor[$teil['je_einheit']['einheit'] ?? 't'] ?? 1.0);
+    }
+    $ergebnis = [];
+    foreach ($felder as $id => $feld) {
+      $f = array_key_exists((string) $id, $flaechen) && $flaechen[(string) $id] !== '' && $flaechen[(string) $id] !== NULL
+        ? (float) $flaechen[(string) $id] : Aufzeichnung::feldgroesse($feld);
+      $m = $mengen[(string) $id] ?? '';
+      $m = ($m === '' || $m === NULL) ? NULL : (float) $m;
+      $t = ($m !== NULL && $je_t !== NULL) ? $m * $je_t : NULL;
+      $ergebnis[$id] = [
+        'flaeche' => $f,
+        'menge' => $m,
+        't' => $t,
+        't_ha' => ($t !== NULL && $f) ? $t / $f : NULL,
+        'je_ha' => NULL,
+        'gesamt' => NULL,
+        'n_ha' => NULL,
+      ];
+    }
+    return $ergebnis;
+  }
+
+  protected function mengenAusFormular(FormStateInterface $form_state): array {
+    $mengen = [];
+    foreach ((array) $form_state->getValue('zeilen') as $id => $zeile) {
+      if (array_key_exists('menge', (array) $zeile)) {
+        $mengen[(string) $id] = $zeile['menge'];
+      }
+    }
+    return $mengen;
+  }
+
   protected function flaechenAusFormular(FormStateInterface $form_state): array {
     $flaechen = [];
     foreach ((array) $form_state->getValue('zeilen') as $id => $zeile) {
@@ -526,12 +669,14 @@ class FeldarbeitForm extends FormBase {
 
   public function neuRechnen(array &$form, FormStateInterface $form_state): void {
     $form_state->set('flaechen', $this->flaechenAusFormular($form_state));
+    $form_state->set('mengen', $this->mengenAusFormular($form_state));
     $form_state->setRebuild();
   }
 
   public function zurueck(array &$form, FormStateInterface $form_state): void {
     $form_state->set('schritt', 1);
     $form_state->set('flaechen', NULL);
+    $form_state->set('mengen', NULL);
     $form_state->setRebuild();
   }
 
@@ -548,7 +693,14 @@ class FeldarbeitForm extends FormBase {
     [$titel, $logtyp, $kategorie] = self::ARBEITEN[$arbeit];
     $etm = Hof::etm();
     $felder = $etm->getStorage('asset')->loadMultiple($e['felder']);
-    $rechnung = $this->rechnen($e, $felder, $this->flaechenAusFormular($form_state));
+    $rechnung = $this->rechnen($e, $felder, $this->flaechenAusFormular($form_state), $this->mengenAusFormular($form_state));
+    if ($arbeit === 'ernte' && !array_filter(array_column($rechnung, 'menge'))) {
+      $this->messenger()->addError('Bitte bei mindestens einem Feld eine Menge eintragen.');
+      $form_state->set('flaechen', $this->flaechenAusFormular($form_state));
+      $form_state->set('mengen', $this->mengenAusFormular($form_state));
+      $form_state->setRebuild();
+      return;
+    }
     $kulturen = Hof::kulturenJeFeld();
     $kategorie_id = Hof::begriff('log_category', $kategorie)->id();
     $menge = $teil['menge'] ?? [];
@@ -565,6 +717,9 @@ class FeldarbeitForm extends FormBase {
     $anzahl = 0;
     foreach ($felder as $id => $feld) {
       $r = $rechnung[$id];
+      if ($arbeit === 'ernte' && empty($r['menge'])) {
+        continue;
+      }
       $plant_ids = array_column($kulturen[$id] ?? [], 'id');
       $kultur_namen = array_column($kulturen[$id] ?? [], 'name');
       $mengen = [];
@@ -584,6 +739,19 @@ class FeldarbeitForm extends FormBase {
         $name = 'Aussaat ' . $frucht . ' – ' . $feld->label();
         if (($menge['wert'] ?? '') !== '') {
           $mengen[] = $this->mengeAnlegen((float) $menge['wert'], $einheit === 'kg' ? 'kg/ha' : $einheit, 'Saatmenge', 'rate');
+        }
+      }
+      elseif ($arbeit === 'ernte') {
+        $gut = trim((string) $teil['erntegut']);
+        $schnitt = $teil['schnitt'] ? ' ' . $teil['schnitt'] . '. Schnitt' : '';
+        $name = 'Ernte: ' . $gut . $schnitt . ' – ' . $feld->label();
+        $ee = $teil['einheit'];
+        $mengen[] = $this->mengeAnlegen($r['menge'], $ee, 'Erntemenge', self::ERNTE_EINHEITEN[$ee] ?? 'count');
+        if ($r['t'] !== NULL && $ee !== 't') {
+          $mengen[] = $this->mengeAnlegen($r['t'], 't', 'Erntemenge (t)', 'weight');
+        }
+        if (($teil['feuchte'] ?? '') !== '') {
+          $mengen[] = $this->mengeAnlegen((float) $teil['feuchte'], '%', 'Feuchte / TS', 'water_content');
         }
       }
       else {
@@ -609,7 +777,18 @@ class FeldarbeitForm extends FormBase {
         'flaeche_ha' => $r['flaeche'],
         'kultur' => $kultur_namen ? implode(', ', $kultur_namen) : NULL,
       ];
-      if ($arbeit !== 'aussaat') {
+      if ($arbeit === 'ernte') {
+        $daten += [
+          'erntegut' => trim((string) $teil['erntegut']),
+          'schnitt' => $teil['schnitt'] ?: NULL,
+          'menge' => $r['menge'],
+          'einheit' => $teil['einheit'],
+          't_gesamt' => $r['t'],
+          't_ha' => $r['t_ha'],
+          'feuchte' => ($teil['feuchte'] ?? '') !== '' ? (float) $teil['feuchte'] : NULL,
+        ];
+      }
+      elseif ($arbeit !== 'aussaat') {
         $daten += ['mittel' => $material_name, 'menge' => $r['je_ha'], 'einheit' => $einheit . '/ha'];
       }
       if ($arbeit === 'pflanzenschutz') {
@@ -659,12 +838,26 @@ class FeldarbeitForm extends FormBase {
       $log = $etm->getStorage('log')->create(array_intersect_key($werte, $definitionen + ['type' => TRUE]));
       $log->save();
       $anzahl++;
+
+      // Kultur nach der Ernte beenden (archivieren).
+      if ($arbeit === 'ernte' && !empty($teil['beenden'])) {
+        foreach ($etm->getStorage('asset')->loadMultiple($plant_ids) as $pflanze) {
+          if ($pflanze->hasField('archived')) {
+            $pflanze->set('archived', TRUE);
+          }
+          elseif ($pflanze->hasField('status')) {
+            $pflanze->set('status', 'archived');
+          }
+          $pflanze->save();
+        }
+      }
     }
 
     $this->messenger()->addStatus($anzahl . ' ' . ($anzahl === 1 ? 'Eintrag' : 'Einträge') . ' „' . $titel . '“ gespeichert.');
     $ziel = match ($arbeit) {
       'duengung' => Url::fromRoute('richterhofos.duengung', [], ['query' => ['jahr' => $jahr]]),
       'pflanzenschutz' => Url::fromRoute('richterhofos.psm', [], ['query' => ['jahr' => $jahr]]),
+      'ernte' => Url::fromRoute('richterhofos.ernte', [], ['query' => ['jahr' => $jahr]]),
       default => Url::fromRoute('richterhofos.kulturen'),
     };
     $form_state->setRedirectUrl($ziel);

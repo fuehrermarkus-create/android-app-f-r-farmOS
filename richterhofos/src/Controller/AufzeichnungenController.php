@@ -29,6 +29,7 @@ class AufzeichnungenController extends ControllerBase {
     foreach ([
       ['richterhofos.psm', 'Pflanzenschutz-Aufzeichnung', 'Alle Pflanzenschutz-Anwendungen des Jahres mit Mittel, Zulassungsnummer, Aufwand, Fläche, Kultur und Anwender.', Aufzeichnung::PSM],
       ['richterhofos.duengung', 'Düngeaufzeichnung', 'Alle Düngungen des Jahres je Feld mit Dünger, Menge und Stickstoff, dazu die Summen für den Betrieb.', Aufzeichnung::DUENGUNG],
+      ['richterhofos.ernte', 'Ernte und Erträge', 'Alle Ernten des Jahres je Erntegut und Schnitt mit Menge, Tonnen und t/ha je Feld.', Aufzeichnung::ERNTE],
     ] as [$route, $titel, $text, $kat]) {
       $ausgaben[] = [
         'titel' => $titel,
@@ -346,6 +347,97 @@ class AufzeichnungenController extends ControllerBase {
       . 'z. B. mit dem LK-Düngerechner ergänzen.</p>',
     ];
     return $build;
+  }
+
+  // ===================================================================== Ernte
+
+  public function ernteTitel(Request $request): string {
+    return 'Ernte und Erträge ' . $this->jahr($request);
+  }
+
+  public function ernte(Request $request): array {
+    $jahr = $this->jahr($request);
+    $gruppen = [];
+    foreach (Aufzeichnung::eintraege(Aufzeichnung::ERNTE, $jahr) as $z) {
+      $k = trim(($z['erntegut'] ?: 'Ernte') . ($z['schnitt'] ? ' · ' . $z['schnitt'] . '. Schnitt' : ''));
+      $gruppen[$k][] = $z;
+    }
+    ksort($gruppen, SORT_NATURAL | SORT_FLAG_CASE);
+
+    $build = [
+      '#attached' => ['library' => ['richterhofos/aufzeichnungen']],
+      '#cache' => ['tags' => ['log_list', 'asset_list'], 'contexts' => ['url.query_args:jahr', 'user']],
+      'jahre' => $this->jahrWahl('richterhofos.ernte', $jahr, [
+        ['titel' => '+ Ernte erfassen', 'url' => Url::fromRoute('richterhofos.feldarbeit', [], ['query' => ['arbeit' => 'ernte']])->toString()],
+        ['titel' => 'CSV herunterladen', 'url' => Url::fromRoute('richterhofos.ernte_csv', [], ['query' => ['jahr' => $jahr]])->toString()],
+      ]),
+      'kopf' => ['#markup' => '<div class="rh-druckkopf"><strong>' . htmlspecialchars((string) $this->config('system.site')->get('name')) . '</strong> · Ernte und Erträge ' . $jahr . ' · erstellt am ' . date('d.m.Y') . '</div>'],
+    ];
+    if (!$gruppen) {
+      $build['leer'] = ['#markup' => '<p class="rh-leer">Keine Ernten in ' . $jahr . '.</p>'];
+    }
+    $i = 0;
+    foreach ($gruppen as $titel => $eintraege) {
+      $zeilen = [];
+      $t_summe = 0.0;
+      $ha_summe = 0.0;
+      $mengen = [];
+      foreach ($eintraege as $z) {
+        if ($z['menge'] !== NULL) {
+          $mengen[$z['einheit'] ?? ''] = ($mengen[$z['einheit'] ?? ''] ?? 0) + $z['menge'];
+        }
+        if ($z['t_gesamt'] !== NULL) {
+          $t_summe += $z['t_gesamt'];
+          $ha_summe += (float) $z['flaeche'];
+        }
+        $t_ha = $z['t_ha'] ?? (($z['t_gesamt'] !== NULL && $z['flaeche']) ? $z['t_gesamt'] / $z['flaeche'] : NULL);
+        $zeilen[] = [
+          self::link($z, $z['datum']),
+          $z['feld'] ?? '–',
+          $z['menge'] !== NULL ? Aufzeichnung::z($z['menge'], 2) . ' ' . ($z['einheit'] ?? '') : '–',
+          Aufzeichnung::z($z['flaeche'], 2),
+          Aufzeichnung::z($z['t_gesamt'], 2),
+          Aufzeichnung::z($t_ha, 2),
+        ];
+      }
+      $summe_menge = implode(', ', array_map(fn($e, $m) => Aufzeichnung::z($m, 1) . ' ' . $e, array_keys($mengen), $mengen));
+      $zeilen[] = [
+        ['data' => ['#markup' => '<strong>Summe</strong>']],
+        '',
+        ['data' => ['#markup' => '<strong>' . htmlspecialchars($summe_menge) . '</strong>']],
+        ['data' => ['#markup' => '<strong>' . Aufzeichnung::z($ha_summe ?: NULL, 2) . '</strong>']],
+        ['data' => ['#markup' => '<strong>' . Aufzeichnung::z($t_summe ?: NULL, 2) . '</strong>']],
+        ['data' => ['#markup' => '<strong>' . Aufzeichnung::z($ha_summe ? $t_summe / $ha_summe : NULL, 2) . '</strong>']],
+      ];
+      $build['g' . $i++] = [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['rh-feldblock']],
+        'titel' => ['#markup' => '<h3 class="rh-feldblock__titel">' . htmlspecialchars($titel) . '</h3>'],
+        'tabelle' => [
+          '#type' => 'table',
+          '#header' => ['Datum', 'Feld', 'Menge', 'Fläche ha', 't', 't/ha'],
+          '#rows' => $zeilen,
+          '#attributes' => ['class' => ['rh-tabelle', 'rh-aufzeichnung']],
+        ],
+      ];
+    }
+    $build['hinweis'] = ['#markup' => '<p class="rh-hinweis">Tonnen und t/ha gibt es nur, wenn bei der Ernte angegeben wurde, wie viel eine Fuhre bzw. ein Ballen wiegt, oder direkt in t, dt oder kg gezählt wurde.</p>'];
+    return $build;
+  }
+
+  public function ernteCsv(Request $request): Response {
+    $jahr = $this->jahr($request);
+    $kopf = ['Datum', 'Feldstueck_Nr', 'Feld', 'Erntegut', 'Schnitt', 'Menge', 'Einheit', 'Flaeche_ha', 't_gesamt', 't_je_ha', 'Kultur'];
+    $zeilen = [];
+    foreach (Aufzeichnung::eintraege(Aufzeichnung::ERNTE, $jahr) as $z) {
+      $t_ha = $z['t_ha'] ?? (($z['t_gesamt'] !== NULL && $z['flaeche']) ? $z['t_gesamt'] / $z['flaeche'] : NULL);
+      $zeilen[] = [
+        date('Y-m-d', $z['zeit']), $z['feldstueck'], $z['feld'], $z['erntegut'], $z['schnitt'],
+        Aufzeichnung::z($z['menge'], 3), $z['einheit'], Aufzeichnung::z($z['flaeche'], 4),
+        Aufzeichnung::z($z['t_gesamt'], 3), Aufzeichnung::z($t_ha, 3), $z['kultur'],
+      ];
+    }
+    return $this->csv("ernte-$jahr.csv", $kopf, $zeilen);
   }
 
   public function duengungCsv(Request $request): Response {

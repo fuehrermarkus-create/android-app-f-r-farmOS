@@ -88,3 +88,4 @@
 .rh-aufz__knopf small { opacity: .85; }
 .rh-aufz__knopf--duengung { background: var(--rh-erde); }
 .rh-aufz__knopf:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,.12); }
+.rh-aufz__knopf--ernte { background: #4a6fa5; }

@@ -12,9 +12,12 @@ Zusatzmodul für farmOS 4 (läuft auch mit 3.5): einfache, moderne Oberfläche f
 - **Blühflächen**: 🌼-Spalte und Filter in „Was wächst wo“ (per Klick markieren/entfernen), eigene Gruppe beim
   Anlegen von Listen, Kachel auf der Hof-Übersicht. Gleiche Markierung (`bluehflaeche`) wie in der App;
   das Modul legt sie selbst an, falls sie fehlt.
-- **Feldarbeit erfassen** (`/feldarbeit`, Knopf „+ Feldarbeit“): Düngung, Pflanzenschutz oder Aussaat für mehrere
+- **Feldarbeit erfassen** (`/feldarbeit`, Knopf „+ Feldarbeit“): Düngung, Pflanzenschutz, Aussaat oder Ernte für mehrere
   Felder auf einmal; Menge je ha oder gesamt (wird nach Fläche aufgeteilt); Kontrolltabelle je Feld mit änderbarer
   Fläche, kg N/ha; übernimmt N-Gehalt und Zulassungsnummer vom letzten Mal. Speichert wie die App (ein Eintrag je Feld).
+- **Ernte**: Erntegut, Schnitt, Zähleinheit (Fuhren, Ballen, t, dt, kg, m³) mit Gewicht je Fuhre/Ballen; Menge je
+  Feld in der Kontrolltabelle, daraus t und t/ha; Kultur auf Wunsch beenden. Jahresübersicht „Ernte und Erträge“
+  (`/aufzeichnungen/ernte`) mit Summen je Erntegut/Schnitt, druckbar und als CSV.
 - **Aufzeichnungen** (`/aufzeichnungen`, Knöpfe auf der Hof-Übersicht): Pflanzenschutz-Aufzeichnung und
   Düngeaufzeichnung je Jahr, druckbar (A4 quer, als PDF speicherbar) und als CSV für Excel. Pflichtangaben,
   die fehlen, sind rot markiert. Die App (ab 1.11) speichert die Angaben maschinenlesbar im Log-Feld `data`.

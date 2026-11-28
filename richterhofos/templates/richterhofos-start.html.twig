@@ -38,6 +38,7 @@
     <nav class="rh-aufz" aria-label="Aufzeichnungen">
       {% if links.psm %}<a class="rh-aufz__knopf" href="{{ links.psm }}?jahr={{ links.jahr }}"><span>Pflanzenschutz-Aufzeichnung {{ links.jahr }}</span><small>Ausgabe für ein Jahr · drucken oder CSV</small></a>{% endif %}
       {% if links.duengung %}<a class="rh-aufz__knopf rh-aufz__knopf--duengung" href="{{ links.duengung }}?jahr={{ links.jahr }}"><span>Düngeaufzeichnung {{ links.jahr }}</span><small>je Feld mit Stickstoff · drucken oder CSV</small></a>{% endif %}
+      {% if links.ernte %}<a class="rh-aufz__knopf rh-aufz__knopf--ernte" href="{{ links.ernte }}?jahr={{ links.jahr }}"><span>Ernte und Erträge {{ links.jahr }}</span><small>je Feld in t und t/ha · drucken oder CSV</small></a>{% endif %}
     </nav>
   {% endif %}
 

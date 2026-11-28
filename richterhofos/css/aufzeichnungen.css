@@ -5,7 +5,8 @@
   color: #fff !important; text-decoration: none !important; transition: transform .12s, box-shadow .12s;
 }
 .rh-ausgabe:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(47,107,58,.25); }
-.rh-ausgabe + .rh-ausgabe, .rh-ausgabe:nth-child(2) { background: #8a5a2b; }
+.rh-ausgabe:nth-child(2) { background: #8a5a2b; }
+.rh-ausgabe:nth-child(3) { background: #4a6fa5; }
 .rh-ausgabe__titel { font-size: 1.25rem; font-weight: 700; }
 .rh-ausgabe__text { opacity: .9; }
 .rh-ausgabe .rh-marke { align-self: flex-start; background: rgba(255,255,255,.2); color: #fff; }
