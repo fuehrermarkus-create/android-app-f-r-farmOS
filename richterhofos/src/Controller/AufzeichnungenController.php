@@ -381,6 +381,8 @@ class AufzeichnungenController extends ControllerBase {
       $zeilen = [];
       $t_summe = 0.0;
       $ha_summe = 0.0;
+      $m3_summe = 0.0;
+      $m3_ha_summe = 0.0;
       $mengen = [];
       foreach ($eintraege as $z) {
         if ($z['menge'] !== NULL) {
@@ -391,11 +393,18 @@ class AufzeichnungenController extends ControllerBase {
           $ha_summe += (float) $z['flaeche'];
         }
         $t_ha = $z['t_ha'] ?? (($z['t_gesamt'] !== NULL && $z['flaeche']) ? $z['t_gesamt'] / $z['flaeche'] : NULL);
+        $m3_ha = $z['m3_ha'] ?? (($z['m3_gesamt'] !== NULL && $z['flaeche']) ? $z['m3_gesamt'] / $z['flaeche'] : NULL);
+        if ($z['m3_gesamt'] !== NULL) {
+          $m3_summe += $z['m3_gesamt'];
+          $m3_ha_summe += (float) $z['flaeche'];
+        }
         $zeilen[] = [
           self::link($z, $z['datum']),
           $z['feld'] ?? '–',
           $z['menge'] !== NULL ? Aufzeichnung::z($z['menge'], 2) . ' ' . ($z['einheit'] ?? '') : '–',
           Aufzeichnung::z($z['flaeche'], 2),
+          Aufzeichnung::z($z['m3_gesamt'], 1),
+          Aufzeichnung::z($m3_ha, 1),
           Aufzeichnung::z($z['t_gesamt'], 2),
           Aufzeichnung::z($t_ha, 2),
         ];
@@ -405,7 +414,9 @@ class AufzeichnungenController extends ControllerBase {
         ['data' => ['#markup' => '<strong>Summe</strong>']],
         '',
         ['data' => ['#markup' => '<strong>' . htmlspecialchars($summe_menge) . '</strong>']],
-        ['data' => ['#markup' => '<strong>' . Aufzeichnung::z($ha_summe ?: NULL, 2) . '</strong>']],
+        ['data' => ['#markup' => '<strong>' . Aufzeichnung::z(max($ha_summe, $m3_ha_summe) ?: NULL, 2) . '</strong>']],
+        ['data' => ['#markup' => '<strong>' . Aufzeichnung::z($m3_summe ?: NULL, 1) . '</strong>']],
+        ['data' => ['#markup' => '<strong>' . Aufzeichnung::z($m3_ha_summe ? $m3_summe / $m3_ha_summe : NULL, 1) . '</strong>']],
         ['data' => ['#markup' => '<strong>' . Aufzeichnung::z($t_summe ?: NULL, 2) . '</strong>']],
         ['data' => ['#markup' => '<strong>' . Aufzeichnung::z($ha_summe ? $t_summe / $ha_summe : NULL, 2) . '</strong>']],
       ];
@@ -415,25 +426,26 @@ class AufzeichnungenController extends ControllerBase {
         'titel' => ['#markup' => '<h3 class="rh-feldblock__titel">' . htmlspecialchars($titel) . '</h3>'],
         'tabelle' => [
           '#type' => 'table',
-          '#header' => ['Datum', 'Feld', 'Menge', 'Fläche ha', 't', 't/ha'],
+          '#header' => ['Datum', 'Feld', 'Menge', 'Fläche ha', 'm³', 'm³/ha', 't', 't/ha'],
           '#rows' => $zeilen,
           '#attributes' => ['class' => ['rh-tabelle', 'rh-aufzeichnung']],
         ],
       ];
     }
-    $build['hinweis'] = ['#markup' => '<p class="rh-hinweis">Tonnen und t/ha gibt es nur, wenn bei der Ernte angegeben wurde, wie viel eine Fuhre bzw. ein Ballen wiegt, oder direkt in t, dt oder kg gezählt wurde.</p>'];
+    $build['hinweis'] = ['#markup' => '<p class="rh-hinweis">m³ gibt es, wenn bei Fuhren der Ladewagen bzw. bei Rundballen der Durchmesser angegeben wurde (Breite 1,23 m). Tonnen gibt es, wenn das Gewicht je Fuhre/Ballen angegeben oder direkt in t, dt oder kg gezählt wurde.</p>'];
     return $build;
   }
 
   public function ernteCsv(Request $request): Response {
     $jahr = $this->jahr($request);
-    $kopf = ['Datum', 'Feldstueck_Nr', 'Feld', 'Erntegut', 'Schnitt', 'Menge', 'Einheit', 'Flaeche_ha', 't_gesamt', 't_je_ha', 'Kultur'];
+    $kopf = ['Datum', 'Feldstueck_Nr', 'Feld', 'Erntegut', 'Schnitt', 'Menge', 'Einheit', 'Flaeche_ha', 'm3_gesamt', 'm3_je_ha', 't_gesamt', 't_je_ha', 'Kultur'];
     $zeilen = [];
     foreach (Aufzeichnung::eintraege(Aufzeichnung::ERNTE, $jahr) as $z) {
       $t_ha = $z['t_ha'] ?? (($z['t_gesamt'] !== NULL && $z['flaeche']) ? $z['t_gesamt'] / $z['flaeche'] : NULL);
       $zeilen[] = [
         date('Y-m-d', $z['zeit']), $z['feldstueck'], $z['feld'], $z['erntegut'], $z['schnitt'],
         Aufzeichnung::z($z['menge'], 3), $z['einheit'], Aufzeichnung::z($z['flaeche'], 4),
+        Aufzeichnung::z($z['m3_gesamt'], 2), Aufzeichnung::z($z['m3_ha'] ?? (($z['m3_gesamt'] !== NULL && $z['flaeche']) ? $z['m3_gesamt'] / $z['flaeche'] : NULL), 2),
         Aufzeichnung::z($z['t_gesamt'], 3), Aufzeichnung::z($t_ha, 3), $z['kultur'],
       ];
     }

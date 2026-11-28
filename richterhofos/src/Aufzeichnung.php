@@ -201,6 +201,8 @@ final class Aufzeichnung {
       'schnitt' => $daten['schnitt'] ?? NULL,
       't_gesamt' => $daten['t_gesamt'] ?? (($einheit === 't') ? $menge : NULL),
       't_ha' => $daten['t_ha'] ?? NULL,
+      'm3_gesamt' => $daten['m3_gesamt'] ?? (($einheit === 'm³') ? $menge : NULL),
+      'm3_ha' => $daten['m3_ha'] ?? NULL,
       'aus_app' => (bool) $daten,
     ];
   }

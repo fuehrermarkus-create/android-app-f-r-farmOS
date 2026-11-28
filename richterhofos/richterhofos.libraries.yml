@@ -39,6 +39,7 @@ feldarbeit:
       css/feldarbeit.css: {}
   js:
     js/listen.js: {}
+    js/feldarbeit.js: {}
   dependencies:
     - core/drupal
     - core/once

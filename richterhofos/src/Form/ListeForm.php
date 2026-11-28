@@ -51,6 +51,8 @@ class ListeForm extends FormBase {
       '#options' => $optionen,
       '#default_value' => $info['arbeit'] ?? 'SILAGE',
       '#attributes' => ['class' => ['rh-auswahlknoepfe']],
+      '#prefix' => '<div class="rh-knopfgruppe">',
+      '#suffix' => '</div>',
     ];
     $form['notiz'] = [
       '#type' => 'textarea',

@@ -60,3 +60,29 @@
 .rh-blueh.is-aus:hover { border-style: solid; color: #2f6b3a !important; }
 .rh-chip--blueh.is-aktiv { background: #d9a400; border-color: #d9a400; }
 @media print { .rh-blueh.is-aus { display: none; } }
+
+/* Auswahlknöpfe als Reihe (Gin legt jede Option in eine eigene Zeile) */
+.rh-knopfgruppe { margin: .75rem 0 1rem; }
+.rh-knopfgruppe fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.rh-knopfgruppe legend, .rh-knopfgruppe .fieldset__legend, .rh-knopfgruppe .form-item__label:not(.option) {
+  float: none; display: block; width: 100%; margin: 0 0 .5rem; padding: 0; font-weight: 700;
+}
+.rh-knopfgruppe .fieldset__wrapper { margin: 0; padding: 0; }
+.rh-knopfgruppe .form-radios, .rh-knopfgruppe .form-boolean-group {
+  display: flex !important; flex-wrap: wrap; gap: .5rem .6rem; align-items: center;
+}
+.rh-knopfgruppe .form-radios > .form-item, .rh-knopfgruppe .form-type--radio, .rh-knopfgruppe .form-type-radio {
+  display: inline-flex; margin: 0 !important; padding: 0 !important; position: relative;
+}
+.rh-knopfgruppe input[type=radio] { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+.rh-knopfgruppe input[type=radio] + label, .rh-knopfgruppe label.option {
+  display: inline-block; margin: 0 !important; padding: .5rem 1.05rem !important; line-height: 1.3;
+  border: 1px solid #cfd8d1; border-radius: 999px; background: #fff; cursor: pointer; font-weight: 600; white-space: nowrap;
+}
+.rh-knopfgruppe input[type=radio] + label::before, .rh-knopfgruppe input[type=radio] + label::after { display: none !important; }
+.rh-knopfgruppe input[type=radio]:checked + label { background: #2f6b3a; border-color: #2f6b3a; color: #fff; }
+.rh-knopfgruppe input[type=radio]:focus-visible + label { outline: 2px solid #2f6b3a; outline-offset: 2px; }
+.rh-knopfgruppe .form-item__description, .rh-knopfgruppe .description { flex-basis: 100%; margin-top: .25rem; }
+.rh-auswahlknoepfe--gross input[type=radio] + label { padding: .7rem 1.4rem !important; font-size: 1.05rem; }
+.gin--dark-mode .rh-knopfgruppe input[type=radio] + label { background: #1d2420; border-color: #2e3631; color: #e8ece9; }
+.gin--dark-mode .rh-knopfgruppe input[type=radio]:checked + label { background: #3f8a4c; color: #fff; }

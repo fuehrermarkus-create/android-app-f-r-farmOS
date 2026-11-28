@@ -33,6 +33,24 @@ class FeldarbeitForm extends FormBase {
   const ERNTE_EINHEITEN = ['Fuhren' => 'count', 'Ballen' => 'count', 't' => 'weight', 'dt' => 'weight', 'kg' => 'weight', 'm³' => 'volume'];
   const ERNTEGUT = ['Grassilage', 'Maissilage', 'Heu', 'Grummet', 'Stroh', 'Weizen', 'Gerste', 'Roggen', 'Triticale', 'Hafer', 'Körnermais', 'Raps', 'Soja', 'Kartoffeln'];
 
+  /** Richtwerte N-Gehalt: Schlüssel => [Name, von, bis, Einheit, Düngerart]. */
+  const RICHTWERTE = [
+    'rindermist' => ['Rindermist (Festmist)', 4, 7, 't', 'Mist / Kompost'],
+    'strohmist' => ['Stallmist mit viel Stroh', 3, 5, 't', 'Mist / Kompost'],
+    'rinderguelle' => ['Rindergülle', 3, 6, 'm³', 'Gülle / Jauche'],
+    'rinderjauche' => ['Rinderjauche', 1, 3, 'm³', 'Gülle / Jauche'],
+  ];
+
+  /** Ladewagen mit Volumen bei mittlerer Pressung (m³). */
+  const LADEWAGEN = [
+    'ladeprofi2' => ['Ladeprofi II', 35],
+    'europrofi5010' => ['Europrofi 5010 Combiline', 50],
+    'europrofi5510' => ['Europrofi 5510 Combiline', 55],
+  ];
+
+  /** Rundballen: Breite fest 1,23 m. */
+  const BALLEN_BREITE = 1.23;
+
   const DUENGERARTEN = ['Gülle / Jauche', 'Mist / Kompost', 'Mineraldünger', 'Gärrest', 'Sonstiger organischer'];
   const TECHNIKEN = ['Schleppschlauch', 'Schleppschuh', 'Injektion / Schlitz', 'Breitverteiler', 'Düngerstreuer', 'Miststreuer'];
 
@@ -68,6 +86,8 @@ class FeldarbeitForm extends FormBase {
       '#options' => array_map(fn($a) => $a[0], self::ARBEITEN),
       '#default_value' => $arbeit,
       '#attributes' => ['class' => ['rh-auswahlknoepfe', 'rh-auswahlknoepfe--gross']],
+      '#prefix' => '<div class="rh-knopfgruppe">',
+      '#suffix' => '</div>',
     ];
     $form['zeit'] = [
       '#type' => 'datetime',
@@ -84,6 +104,18 @@ class FeldarbeitForm extends FormBase {
       '#title' => 'Düngung',
       '#tree' => TRUE,
       '#states' => $sichtbar('duengung'),
+      'richtwert' => [
+        '#type' => 'select',
+        '#title' => 'Wirtschaftsdünger mit Richtwert',
+        '#options' => array_map(fn($r) => $r[0] . ' · ca. ' . $r[1] . '–' . $r[2] . ' kg N/' . $r[3], self::RICHTWERTE),
+        '#empty_option' => '– anderer Dünger –',
+        '#default_value' => $alt['duengung']['richtwert'] ?? NULL,
+        '#description' => 'Füllt Dünger, Art, Einheit und N-Gehalt (Mitte der Spanne) aus. Mit Analysewert genauer – dann N-Gehalt überschreiben.',
+        '#attributes' => [
+          'class' => ['rh-richtwert'],
+          'data-richtwerte' => json_encode(self::RICHTWERTE, JSON_UNESCAPED_UNICODE),
+        ],
+      ],
       'duenger' => $this->material('Dünger', 'z. B. Rindergülle, Mist, NAC 27', $alt['duengung']['duenger'] ?? ''),
       'duengerart' => [
         '#type' => 'radios',
@@ -91,6 +123,8 @@ class FeldarbeitForm extends FormBase {
         '#options' => array_combine(self::DUENGERARTEN, self::DUENGERARTEN),
         '#default_value' => $alt['duengung']['duengerart'] ?? NULL,
         '#attributes' => ['class' => ['rh-auswahlknoepfe']],
+        '#prefix' => '<div class="rh-knopfgruppe">',
+        '#suffix' => '</div>',
       ],
       'menge' => $this->menge($alt['duengung'] ?? [], ['m³' => 'm³', 't' => 't', 'kg' => 'kg'], 'Ausgebrachte Menge',
         'Gülle: m³, Mist: t, Mineraldünger: kg. „Gesamt“ wird nach der Fläche auf die Felder aufgeteilt.'),
@@ -211,7 +245,42 @@ class FeldarbeitForm extends FormBase {
         '#options' => array_combine(array_keys(self::ERNTE_EINHEITEN), array_keys(self::ERNTE_EINHEITEN)),
         '#default_value' => $alt['ernte']['einheit'] ?? 'Fuhren',
         '#attributes' => ['class' => ['rh-auswahlknoepfe']],
+        '#prefix' => '<div class="rh-knopfgruppe">',
+        '#suffix' => '</div>',
         '#description' => 'Die Menge je Feld gibst du im nächsten Schritt ein, z. B. 3 Fuhren hier und 7 dort.',
+      ],
+      'ladewagen' => [
+        '#type' => 'container',
+        '#attributes' => ['class' => ['rh-mengenzeile']],
+        '#states' => ['visible' => [':input[name="ernte[einheit]"]' => ['value' => 'Fuhren']]],
+        'modell' => [
+          '#type' => 'select',
+          '#title' => 'Ladewagen',
+          '#options' => array_map(fn($w) => $w[0] . ' · ' . $w[1] . ' m³', self::LADEWAGEN) + ['andere' => 'anderer Wagen'],
+          '#empty_option' => '– ohne Volumen –',
+          '#default_value' => $alt['ernte']['ladewagen']['modell'] ?? NULL,
+          '#description' => 'Volumen bei mittlerer Pressung',
+        ],
+        'volumen' => [
+          '#type' => 'number',
+          '#title' => 'Volumen je Fuhre (m³)',
+          '#step' => 'any',
+          '#min' => 0,
+          '#default_value' => $alt['ernte']['ladewagen']['volumen'] ?? NULL,
+          '#states' => ['visible' => [':input[name="ernte[ladewagen][modell]"]' => ['value' => 'andere']]],
+        ],
+      ],
+      'ballen' => [
+        '#type' => 'container',
+        '#states' => ['visible' => [':input[name="ernte[einheit]"]' => ['value' => 'Ballen']]],
+        'durchmesser' => [
+          '#type' => 'select',
+          '#title' => 'Rundballen-Durchmesser',
+          '#options' => array_map(fn($d) => $d . ' (' . number_format(M_PI * ((float) str_replace(',', '.', $d) / 2) ** 2 * self::BALLEN_BREITE, 2, ',', '') . ' m³)', ['1.40' => '1,40 m', '1.45' => '1,45 m', '1.50' => '1,50 m', '1.55' => '1,55 m', '1.60' => '1,60 m', '1.65' => '1,65 m', '1.70' => '1,70 m', '1.75' => '1,75 m', '1.80' => '1,80 m', '1.85' => '1,85 m', '1.90' => '1,90 m']),
+          '#empty_option' => '– ohne Volumen –',
+          '#default_value' => $alt['ernte']['ballen']['durchmesser'] ?? NULL,
+          '#description' => 'Breite 1,23 m. Daraus rechnet richterhofOS das Volumen je Ballen.',
+        ],
       ],
       'je_einheit' => [
         '#type' => 'container',
@@ -219,11 +288,11 @@ class FeldarbeitForm extends FormBase {
         '#states' => ['invisible' => [':input[name="ernte[einheit]"]' => [['value' => 't'], ['value' => 'dt'], ['value' => 'kg']]]],
         'wert' => [
           '#type' => 'number',
-          '#title' => 'Eine Fuhre / ein Ballen / ein m³ entspricht etwa',
+          '#title' => 'Gewicht je Fuhre / Ballen / m³ (optional)',
           '#step' => 'any',
           '#min' => 0,
           '#default_value' => $alt['ernte']['je_einheit']['wert'] ?? NULL,
-          '#description' => 'Optional. Damit rechnet richterhofOS Tonnen und t/ha aus.',
+          '#description' => 'Damit rechnet richterhofOS zusätzlich Tonnen und t/ha aus.',
         ],
         'einheit' => [
           '#type' => 'select',
@@ -325,6 +394,8 @@ class FeldarbeitForm extends FormBase {
         '#options' => ['ha' => 'je ha', 'gesamt' => 'gesamt für alle Felder'],
         '#default_value' => $alt['menge']['bezug'] ?? 'ha',
         '#attributes' => ['class' => ['rh-auswahlknoepfe']],
+        '#prefix' => '<div class="rh-knopfgruppe">',
+        '#suffix' => '</div>',
       ];
     }
     return $teil;
@@ -391,7 +462,7 @@ class FeldarbeitForm extends FormBase {
     }
     $menge = $teil['menge']['wert'] ?? '';
     if ($arbeit === 'duengung') {
-      if (trim((string) $teil['duenger']) === '') {
+      if (trim((string) $teil['duenger']) === '' && empty($teil['richtwert'])) {
         $form_state->setErrorByName('duengung][duenger', 'Bitte den Dünger angeben.');
       }
       if ($menge === '' || $menge === NULL) {
@@ -438,6 +509,21 @@ class FeldarbeitForm extends FormBase {
       'notiz' => trim((string) $form_state->getValue('notiz')),
       $arbeit => $teil,
     ];
+    if ($arbeit === 'duengung' && !empty($teil['richtwert']) && isset(self::RICHTWERTE[$teil['richtwert']])) {
+      [$rw_name, $von, $bis, $rw_einheit, $rw_art] = self::RICHTWERTE[$teil['richtwert']];
+      if (trim((string) $teil['duenger']) === '') {
+        $teil['duenger'] = $rw_name;
+        $eingabe['duengung']['duenger'] = $rw_name;
+      }
+      if (($teil['n_gehalt'] ?? '') === '') {
+        $teil['n_gehalt'] = ($von + $bis) / 2;
+        $eingabe['duengung']['n_gehalt'] = $teil['n_gehalt'];
+        $eingabe['duengung']['n_quelle'] = 'Richtwert ' . $von . '–' . $bis . ' kg N/' . $rw_einheit;
+      }
+      if (empty($teil['duengerart'])) {
+        $eingabe['duengung']['duengerart'] = $rw_art;
+      }
+    }
     if ($arbeit === 'duengung') {
       $e = $teil['einarbeitung'] ?? NULL;
       $eingabe['duengung']['einarbeitung'] = (!empty($teil['eingearbeitet']) && $e instanceof DrupalDateTime) ? $e->getTimestamp() : NULL;
@@ -472,9 +558,11 @@ class FeldarbeitForm extends FormBase {
     $kulturen = Hof::kulturenJeFeld();
 
     $was = match ($arbeit) {
-      'duengung' => trim((string) $teil['duenger']) . ($teil['duengerart'] ? ' (' . $teil['duengerart'] . ')' : ''),
+      'duengung' => trim((string) $teil['duenger']) . ($teil['duengerart'] ? ' (' . $teil['duengerart'] . ')' : '')
+        . (($teil['n_gehalt'] ?? '') !== '' ? ' · ' . Aufzeichnung::z((float) $teil['n_gehalt']) . ' kg N je Einheit' . (!empty($teil['n_quelle']) ? ' (' . $teil['n_quelle'] . ')' : '') : ''),
       'pflanzenschutz' => trim((string) $teil['mittel']) . ' · Zulassung ' . ($teil['zulassungsnummer'] ?: '–'),
-      'ernte' => trim((string) $teil['erntegut']) . ($teil['schnitt'] ? ' · ' . $teil['schnitt'] . '. Schnitt' : ''),
+      'ernte' => trim((string) $teil['erntegut']) . ($teil['schnitt'] ? ' · ' . $teil['schnitt'] . '. Schnitt' : '')
+        . (($v = $this->volumenJeEinheit($teil)) !== NULL && $teil['einheit'] !== 'm³' ? ' · ' . Aufzeichnung::z($v, 2) . ' m³ je ' . ($teil['einheit'] === 'Ballen' ? 'Ballen' : 'Fuhre') : ''),
       default => trim((string) $teil['frucht']) . ($teil['sorte'] ? ' ' . trim((string) $teil['sorte']) : ''),
     };
     $menge = $teil['menge'] ?? [];
@@ -498,6 +586,8 @@ class FeldarbeitForm extends FormBase {
     $kopf = ['Feld', 'Frucht', 'Fläche ha'];
     if ($arbeit === 'ernte') {
       $kopf[] = 'Menge (' . $teil['einheit'] . ')';
+      $kopf[] = 'm³';
+      $kopf[] = 'm³/ha';
       $kopf[] = 't gesamt';
       $kopf[] = 't/ha';
     }
@@ -543,6 +633,8 @@ class FeldarbeitForm extends FormBase {
           '#default_value' => $mengen[(string) $id] ?? NULL,
           '#field_suffix' => $teil['einheit'],
         ];
+        $zeile['m3'] = ['#plain_text' => $r['m3'] !== NULL ? Aufzeichnung::z($r['m3'], 1) : '–'];
+        $zeile['m3_ha'] = ['#plain_text' => $r['m3_ha'] !== NULL ? Aufzeichnung::z($r['m3_ha'], 1) : '–'];
         $zeile['t'] = ['#plain_text' => $r['t'] !== NULL ? Aufzeichnung::z($r['t'], 2) : '–'];
         $zeile['t_ha'] = ['#plain_text' => $r['t_ha'] !== NULL ? Aufzeichnung::z($r['t_ha'], 2) : '–'];
       }
@@ -629,6 +721,7 @@ class FeldarbeitForm extends FormBase {
       $w = $teil['je_einheit']['wert'] ?? '';
       $je_t = ($w === '' || $w === NULL) ? NULL : (float) $w * ($faktor[$teil['je_einheit']['einheit'] ?? 't'] ?? 1.0);
     }
+    $vol_je = $this->volumenJeEinheit($teil);
     $ergebnis = [];
     foreach ($felder as $id => $feld) {
       $f = array_key_exists((string) $id, $flaechen) && $flaechen[(string) $id] !== '' && $flaechen[(string) $id] !== NULL
@@ -641,12 +734,37 @@ class FeldarbeitForm extends FormBase {
         'menge' => $m,
         't' => $t,
         't_ha' => ($t !== NULL && $f) ? $t / $f : NULL,
+        'm3' => ($m !== NULL && $vol_je !== NULL) ? $m * $vol_je : NULL,
+        'm3_ha' => ($m !== NULL && $vol_je !== NULL && $f) ? $m * $vol_je / $f : NULL,
         'je_ha' => NULL,
         'gesamt' => NULL,
         'n_ha' => NULL,
       ];
     }
     return $ergebnis;
+  }
+
+  /**
+   * Volumen je Zähleinheit in m³: Ladewagen, Rundballen (π·r²·1,23 m) oder m³.
+   */
+  protected function volumenJeEinheit(array $teil): ?float {
+    $einheit = $teil['einheit'] ?? '';
+    if ($einheit === 'm³') {
+      return 1.0;
+    }
+    if ($einheit === 'Fuhren') {
+      $modell = $teil['ladewagen']['modell'] ?? '';
+      if (isset(self::LADEWAGEN[$modell])) {
+        return (float) self::LADEWAGEN[$modell][1];
+      }
+      $v = $teil['ladewagen']['volumen'] ?? '';
+      return ($modell === 'andere' && $v !== '' && $v !== NULL) ? (float) $v : NULL;
+    }
+    if ($einheit === 'Ballen' && !empty($teil['ballen']['durchmesser'])) {
+      $d = (float) $teil['ballen']['durchmesser'];
+      return M_PI * ($d / 2) ** 2 * self::BALLEN_BREITE;
+    }
+    return NULL;
   }
 
   protected function mengenAusFormular(FormStateInterface $form_state): array {
@@ -747,6 +865,9 @@ class FeldarbeitForm extends FormBase {
         $name = 'Ernte: ' . $gut . $schnitt . ' – ' . $feld->label();
         $ee = $teil['einheit'];
         $mengen[] = $this->mengeAnlegen($r['menge'], $ee, 'Erntemenge', self::ERNTE_EINHEITEN[$ee] ?? 'count');
+        if ($r['m3'] !== NULL && $ee !== 'm³') {
+          $mengen[] = $this->mengeAnlegen($r['m3'], 'm³', 'Erntemenge (m³)', 'volume');
+        }
         if ($r['t'] !== NULL && $ee !== 't') {
           $mengen[] = $this->mengeAnlegen($r['t'], 't', 'Erntemenge (t)', 'weight');
         }
@@ -783,6 +904,11 @@ class FeldarbeitForm extends FormBase {
           'schnitt' => $teil['schnitt'] ?: NULL,
           'menge' => $r['menge'],
           'einheit' => $teil['einheit'],
+          'volumen_je_einheit' => $this->volumenJeEinheit($teil),
+          'ladewagen' => isset(self::LADEWAGEN[$teil['ladewagen']['modell'] ?? '']) && $teil['einheit'] === 'Fuhren' ? self::LADEWAGEN[$teil['ladewagen']['modell']][0] : NULL,
+          'ballen_durchmesser' => $teil['einheit'] === 'Ballen' && !empty($teil['ballen']['durchmesser']) ? (float) $teil['ballen']['durchmesser'] : NULL,
+          'm3_gesamt' => $r['m3'],
+          'm3_ha' => $r['m3_ha'],
           't_gesamt' => $r['t'],
           't_ha' => $r['t_ha'],
           'feuchte' => ($teil['feuchte'] ?? '') !== '' ? (float) $teil['feuchte'] : NULL,
@@ -807,6 +933,7 @@ class FeldarbeitForm extends FormBase {
         $daten += [
           'duengerart' => $teil['duengerart'] ?: NULL,
           'n_gehalt' => ($teil['n_gehalt'] ?? '') !== '' ? (float) $teil['n_gehalt'] : NULL,
+          'n_quelle' => $teil['n_quelle'] ?? NULL,
           'technik' => $teil['technik'] ?: NULL,
           'einarbeitung' => !empty($teil['einarbeitung']) ? date('c', (int) $teil['einarbeitung']) : NULL,
         ];

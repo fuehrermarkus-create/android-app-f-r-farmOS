@@ -15,7 +15,11 @@ Zusatzmodul für farmOS 4 (läuft auch mit 3.5): einfache, moderne Oberfläche f
 - **Feldarbeit erfassen** (`/feldarbeit`, Knopf „+ Feldarbeit“): Düngung, Pflanzenschutz, Aussaat oder Ernte für mehrere
   Felder auf einmal; Menge je ha oder gesamt (wird nach Fläche aufgeteilt); Kontrolltabelle je Feld mit änderbarer
   Fläche, kg N/ha; übernimmt N-Gehalt und Zulassungsnummer vom letzten Mal. Speichert wie die App (ein Eintrag je Feld).
-- **Ernte**: Erntegut, Schnitt, Zähleinheit (Fuhren, Ballen, t, dt, kg, m³) mit Gewicht je Fuhre/Ballen; Menge je
+- **Richtwerte Wirtschaftsdünger** (kg N): Rindermist 4–7/t, Stallmist mit viel Stroh 3–5/t, Rindergülle 3–6/m³,
+  Rinderjauche 1–3/m³ – Auswahl füllt Dünger, Art, Einheit und N-Gehalt (Mitte der Spanne).
+- **Ernte**: Erntegut, Schnitt, Zähleinheit (Fuhren, Ballen, t, dt, kg, m³); Volumen aus Ladewagen (Ladeprofi II
+  35 m³, Europrofi 5010/5510 Combiline 50/55 m³) bzw. Rundballen-Durchmesser 1,40–1,90 m (Breite 1,23 m),
+  optional Gewicht je Fuhre/Ballen; Menge je
   Feld in der Kontrolltabelle, daraus t und t/ha; Kultur auf Wunsch beenden. Jahresübersicht „Ernte und Erträge“
   (`/aufzeichnungen/ernte`) mit Summen je Erntegut/Schnitt, druckbar und als CSV.
 - **Aufzeichnungen** (`/aufzeichnungen`, Knöpfe auf der Hof-Übersicht): Pflanzenschutz-Aufzeichnung und
