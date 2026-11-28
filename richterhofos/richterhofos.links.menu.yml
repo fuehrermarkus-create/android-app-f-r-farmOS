@@ -26,3 +26,10 @@ richterhofos.aufzeichnungen:
   parent: farm.base
   menu_name: admin
   weight: 8
+richterhofos.feldarbeit:
+  title: 'Feldarbeit erfassen'
+  description: 'Düngung, Pflanzenschutz oder Aussaat für mehrere Felder auf einmal'
+  route_name: richterhofos.feldarbeit
+  parent: farm.base
+  menu_name: admin
+  weight: -90

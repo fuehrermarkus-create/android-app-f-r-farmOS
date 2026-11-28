@@ -100,6 +100,7 @@ final class Hof {
       }
       foreach ($standort->getLocation($pflanze) as $ort) {
         $ergebnis[$ort->id()][] = [
+          'id' => $pflanze->id(),
           'name' => $pflanze->label(),
           'art' => $arten ? implode(', ', $arten) : 'Kultur',
           'seit' => $seit,

@@ -95,3 +95,17 @@ richterhofos.duengung_csv:
     _controller: '\Drupal\richterhofos\Controller\AufzeichnungenController::duengungCsv'
   requirements:
     _user_is_logged_in: 'TRUE'
+richterhofos.feldarbeit:
+  path: '/feldarbeit'
+  defaults:
+    _form: '\Drupal\richterhofos\Form\FeldarbeitForm'
+    _title: 'Feldarbeit erfassen'
+  requirements:
+    _entity_create_access: 'log:input'
+richterhofos.vorschlag:
+  path: '/richterhofos/vorschlag/{vokabular}'
+  defaults:
+    _controller: '\Drupal\richterhofos\Controller\VorschlagController::vorschlag'
+  requirements:
+    _user_is_logged_in: 'TRUE'
+    vokabular: '[a-z_]+'

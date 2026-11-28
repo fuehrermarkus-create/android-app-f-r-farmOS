@@ -31,3 +31,14 @@ aufzeichnungen:
   dependencies:
     - core/drupal
     - core/once
+feldarbeit:
+  version: 1.0.0
+  css:
+    theme:
+      css/listen.css: {}
+      css/feldarbeit.css: {}
+  js:
+    js/listen.js: {}
+  dependencies:
+    - core/drupal
+    - core/once

@@ -106,6 +106,7 @@ class StartController extends ControllerBase {
   protected function aktionen(): array {
     $aktionen = [];
     $ziele = [
+      ['Feldarbeit', '/feldarbeit', 'log', 'input'],
       ['Neue Liste', '/listen/neu', 'log', 'activity'],
       ['Neue Arbeit', '/log/add/activity', 'log', 'activity'],
       ['Neue Beobachtung', '/log/add/observation', 'log', 'observation'],

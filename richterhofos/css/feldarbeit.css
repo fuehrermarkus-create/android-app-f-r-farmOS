@@ -1,0 +1,12 @@
+/* richterhofOS – Feldarbeit erfassen */
+.rh-feldarbeit { max-width: 980px; }
+.rh-feldarbeit fieldset { border-radius: 14px; }
+.rh-auswahlknoepfe--gross .form-item label { padding: .7rem 1.3rem; font-size: 1.05rem; font-weight: 600; }
+.rh-mengenzeile { display: flex; flex-wrap: wrap; gap: .5rem 1rem; align-items: flex-end; }
+.rh-mengenzeile .form-item { margin-top: 0; }
+.rh-mengenzeile input[type=number] { max-width: 10rem; }
+.rh-mehrspaltig .form-checkboxes, .rh-mehrspaltig.form-checkboxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .1rem .75rem; }
+.rh-kontrollkopf { margin-bottom: 1rem; }
+.rh-kontrollkopf strong { font-size: 1.2rem; margin-left: .35rem; }
+.rh-kontrollkopf p { margin: .3rem 0; }
+.rh-kontrolle input[type=number] { max-width: 7rem; }
